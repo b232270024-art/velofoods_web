@@ -26,14 +26,22 @@ export function PlanReviewStep({
 }) {
   const mealLabels = getMealLabel(tr);
 
+  // date -> meal -> items[] — нэг цагт олон ангиллын (Main Course, Soup, Snack
+  // гэх мэт) хоол орсон ч цаг тус бүрийн гарчгийн дор бүгд цэгцтэй жагсаагдана.
   const byDate = useMemo(() => {
-    const map = new Map();
+    const dateMap = new Map();
     for (const item of reviewItems) {
-      if (!map.has(item.date)) map.set(item.date, []);
-      map.get(item.date).push(item);
+      if (!dateMap.has(item.date)) dateMap.set(item.date, new Map());
+      const mealMap = dateMap.get(item.date);
+      if (!mealMap.has(item.meal)) mealMap.set(item.meal, []);
+      mealMap.get(item.meal).push(item);
     }
-    for (const list of map.values()) list.sort((a, b) => MEAL_ORDER[a.meal] - MEAL_ORDER[b.meal]);
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return [...dateMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, mealMap]) => [
+        date,
+        [...mealMap.entries()].sort(([a], [b]) => MEAL_ORDER[a] - MEAL_ORDER[b]),
+      ]);
   }, [reviewItems]);
 
   const coreTotal = reviewItems.reduce((s, i) => s + Number(i.price_usd), 0);
@@ -67,17 +75,20 @@ export function PlanReviewStep({
       </div>
 
       <div className="card" style={{ padding: '20px 22px', marginBottom: 20 }}>
-        {byDate.map(([date, items]) => (
+        {byDate.map(([date, meals]) => (
           <div key={date} style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'var(--text-dark)', marginBottom: 6 }}>
               {formatPlanDate(date, language)}
             </div>
-            {items.map(item => (
-              <div key={`${item.date}-${item.meal}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '3px 0', color: 'var(--text-body)' }}>
-                <span>
-                  <span style={{ color: 'var(--text-muted)' }}>{mealLabels[item.meal]}:</span> {item.name}
-                </span>
-                <span style={{ fontWeight: 700, color: 'var(--text-dark)', flexShrink: 0 }}>${Number(item.price_usd).toFixed(2)}</span>
+            {meals.map(([meal, items]) => (
+              <div key={meal} style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', marginTop: 4 }}>{mealLabels[meal]}</div>
+                {items.map(item => (
+                  <div key={`${item.date}-${item.meal}-${item.category}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '2px 0 2px 4px', color: 'var(--text-body)' }}>
+                    <span>{item.name}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-dark)', flexShrink: 0 }}>${Number(item.price_usd).toFixed(2)}</span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>

@@ -6,8 +6,6 @@ import { resolvePlanWindow, dateToDayNumber, enumerateDates } from '../services/
 
 export const ordersRouter = Router();
 
-const PLAN_MEAL_TIMES = ['morning', 'lunch', 'evening'];
-
 // items: [{ menu_item_id, quantity, guest_name }]
 ordersRouter.post('/', requireSession, validateBody(createOrderSchema), async (req, res) => {
   const { items } = req.body;
@@ -143,46 +141,65 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
     return res.status(400).json({ error: 'Одоогоор идэвхтэй 12 хоногийн эргэлт байхгүй байна.' });
   }
 
-  // Тухайн зочинд харагдах ёстой (огноо × цаг) слотуудыг серверт дахин
-  // тооцоолж, ирсэн selections яг үүнтэй нэг мөр таарч байгааг шалгана.
+  // Тухайн зочинд харагдах ёстой (огноо × цаг × АНГИЛАЛ) слотуудыг нэг query-ээр
+  // серверт дахин тооцоолно — admin аль өдөр/цагт ямар ангиллын хоол тохируулсан
+  // нь хувьсах тул (жишээ нь Main Course + Soup) слотын тоо ч хувьсах ёстой.
   const expectedDates = enumerateDates(window.firstAvailableDate, window.endDate);
-  const expectedSlots = new Set();
-  for (const date of expectedDates) {
-    for (const mealTime of PLAN_MEAL_TIMES) expectedSlots.add(`${date}|${mealTime}`);
+  const dayNumbers = [...new Set(expectedDates.map(d => dateToDayNumber(d, window.cycleStartDate)))];
+  const dayNumberToDate = Object.fromEntries(expectedDates.map(d => [dateToDayNumber(d, window.cycleStartDate), d]));
+
+  const configured = await pool.query(
+    `SELECT pi.day_number, pi.meal_time, COALESCE(mi.category, '') AS category,
+            mi.id AS menu_item_id, mi.price_usd
+     FROM twelve_day_plan_items pi
+     JOIN menu_items mi ON mi.id = pi.menu_item_id
+     WHERE pi.day_number = ANY($1::int[]) AND mi.diet_type_id = $2 AND mi.is_deleted = false`,
+    [dayNumbers, session.diet_type_id]
+  );
+
+  // "date|meal" -> Map(menu_item_id -> { category, price }); мөн бүх боломжит
+  // (date|meal|category) багц (bucket)-уудыг цуглуулна — сонголт бүр яг нэг
+  // багцад унах ёстой, багц бүрт яг нэг сонголт байх ёстой.
+  const optionsByDateMeal = new Map();
+  const expectedBucketKeys = new Set();
+  for (const row of configured.rows) {
+    const date = dayNumberToDate[row.day_number];
+    if (!date) continue;
+    const dmKey = `${date}|${row.meal_time}`;
+    if (!optionsByDateMeal.has(dmKey)) optionsByDateMeal.set(dmKey, new Map());
+    optionsByDateMeal.get(dmKey).set(row.menu_item_id, { category: row.category, price: Number(row.price_usd) });
+    expectedBucketKeys.add(`${dmKey}|${row.category}`);
   }
-  if (selections.length !== expectedSlots.size) {
-    return res.status(400).json({ error: 'Сонголтын тоо тухайн үеийн өдөр/цагийн тоотой таарахгүй байна.' });
+
+  if (selections.length !== expectedBucketKeys.size) {
+    return res.status(400).json({ error: 'Сонголтын тоо тухайн үеийн өдөр/цаг/ангиллын тоотой таарахгүй байна.' });
   }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const seenSlots = new Set();
+    const seenBuckets = new Set();
     const resolvedItems = [];
     let total = 0;
 
     for (const sel of selections) {
-      const slotKey = `${sel.plan_date}|${sel.meal_time}`;
-      if (!expectedSlots.has(slotKey)) throw new Error(`Буруу огноо/цаг: ${slotKey}`);
-      if (seenSlots.has(slotKey)) throw new Error(`Давхардсан сонголт: ${slotKey}`);
-      seenSlots.add(slotKey);
+      const dmKey = `${sel.plan_date}|${sel.meal_time}`;
+      // Сонголт нь admin-ийн тухайн (өдөр, цаг, ангилал) слотод зөвшөөрсөн
+      // (1 үндсэн + ≤2 нөөц) хоолнуудын нэг мөн эсэхийг шалгана — ангилал нь
+      // menu_item_id-ээр дамжин implicit тодорхойлогдоно.
+      const match = optionsByDateMeal.get(dmKey)?.get(sel.menu_item_id);
+      if (!match) throw new Error(`Буруу сонголт: ${sel.plan_date} ${sel.meal_time}`);
 
-      const dayNumber = dateToDayNumber(sel.plan_date, window.cycleStartDate);
-      // Сонголт нь admin-ийн тухайн слотод зөвшөөрсөн (1 үндсэн + ≤2 нөөц)
-      // хоолнуудын нэг мөн эсэхийг, мөн зочны ангилалтай тохирч байгааг шалгана.
-      const option = await client.query(
-        `SELECT mi.price_usd FROM twelve_day_plan_items pi
-         JOIN menu_items mi ON mi.id = pi.menu_item_id
-         WHERE pi.day_number = $1 AND pi.meal_time = $2 AND pi.menu_item_id = $3
-           AND mi.diet_type_id = $4 AND mi.is_deleted = false`,
-        [dayNumber, sel.meal_time, sel.menu_item_id, session.diet_type_id]
-      );
-      if (option.rows.length === 0) throw new Error(`Буруу сонголт: ${sel.plan_date} ${sel.meal_time}`);
+      const bucketKey = `${dmKey}|${match.category}`;
+      if (seenBuckets.has(bucketKey)) throw new Error(`Давхардсан сонголт: ${bucketKey}`);
+      seenBuckets.add(bucketKey);
 
-      const unitPrice = Number(option.rows[0].price_usd);
-      total += unitPrice;
-      resolvedItems.push({ menu_item_id: sel.menu_item_id, plan_date: sel.plan_date, meal_time: sel.meal_time, unitPrice });
+      total += match.price;
+      resolvedItems.push({ menu_item_id: sel.menu_item_id, plan_date: sel.plan_date, meal_time: sel.meal_time, unitPrice: match.price });
+    }
+    if (seenBuckets.size !== expectedBucketKeys.size) {
+      throw new Error('Зарим өдөр/цаг/ангилалд сонголт дутуу байна.');
     }
 
     let addonUnitPrice = null;

@@ -256,7 +256,7 @@ adminRouter.get('/plan', asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT pi.id, pi.day_number, pi.meal_time, pi.menu_item_id, pi.sort_order,
-            mi.name, mi.price_usd, mi.image_url, mi.allergens, mi.diet_type_id, r.name AS restaurant_name
+            mi.name, mi.price_usd, mi.image_url, mi.allergens, mi.diet_type_id, mi.category, r.name AS restaurant_name
      FROM twelve_day_plan_items pi
      JOIN menu_items mi ON mi.id = pi.menu_item_id
      JOIN restaurants r ON r.id = mi.restaurant_id
@@ -267,30 +267,35 @@ adminRouter.get('/plan', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
-// Тухайн (өдөр, цаг)-т menu item нэмнэ. Слот бүрд дээд тал нь 3 хоол (1 үндсэн
-// + 2 нөөц, sort_order 0/1/2) — зочин эдгээрийн дундаас сольж болно. Аль
-// хэдийн нэмэгдсэн бол дахин давхардуулахгүй (UNIQUE constraint).
+// Тухайн (өдөр, цаг, АНГИЛАЛ)-т menu item нэмнэ. Нэг өдөр/цагт хэд ч ангиллын
+// хоол зэрэгцэн орж болно (жишээ нь Main Course + Soup + Snack) — ангилал
+// бүр дотроо дээд тал нь 3 хоол (1 үндсэн + 2 нөөц, sort_order 0/1/2), зочин
+// эдгээрийн дундаас л сольж болно. Ангилал нь menu_items.category-гаар
+// тодорхойлогддог тул admin тусад нь сонгох шаардлагагүй — ямар хоол
+// сонгосноос нь автоматаар тодорхойлогдоно. Аль хэдийн нэмэгдсэн бол дахин
+// давхардуулахгүй (UNIQUE constraint).
 adminRouter.post('/plan-items', validateBody(createPlanItemSchema), asyncHandler(async (req, res) => {
   const { day_number, meal_time, menu_item_id } = req.body;
 
   const menuItem = await pool.query(
-    'SELECT id, restaurant_id FROM menu_items WHERE id = $1 AND is_deleted = false',
+    'SELECT id, restaurant_id, category FROM menu_items WHERE id = $1 AND is_deleted = false',
     [menu_item_id]
   );
   if (menuItem.rows.length === 0) {
     return res.status(400).json({ error: 'Сонгосон хоол олдсонгүй.' });
   }
-  const { restaurant_id } = menuItem.rows[0];
+  const { restaurant_id, category } = menuItem.rows[0];
 
   const existing = await pool.query(
     `SELECT count(*)::int AS n FROM twelve_day_plan_items pi
      JOIN menu_items mi ON mi.id = pi.menu_item_id
-     WHERE pi.day_number = $1 AND pi.meal_time = $2 AND mi.restaurant_id = $3`,
-    [day_number, meal_time, restaurant_id]
+     WHERE pi.day_number = $1 AND pi.meal_time = $2 AND mi.restaurant_id = $3
+       AND COALESCE(mi.category, '') = COALESCE($4, '')`,
+    [day_number, meal_time, restaurant_id, category]
   );
   const slotCount = existing.rows[0].n;
   if (slotCount >= 3) {
-    return res.status(400).json({ error: 'Энэ цаг дээр 3-аас дээш хоол зөвшөөрөгдөхгүй (1 үндсэн + 2 нөөц).' });
+    return res.status(400).json({ error: `"${category || 'Бусад'}" ангилалд энэ цаг дээр 3-аас дээш хоол зөвшөөрөгдөхгүй (1 үндсэн + 2 нөөц).` });
   }
 
   const { rows } = await pool.query(
@@ -303,8 +308,9 @@ adminRouter.post('/plan-items', validateBody(createPlanItemSchema), asyncHandler
   res.status(201).json(rows[0] ?? { alreadyExists: true });
 }));
 
-// Slot-с хоол хасна, дараа нь үлдсэн зүйлсийг sort_order-оор дахин 0..n-1
-// болгож дараалуулна — "үндсэн" сонголт (sort_order=0) үргэлж тодорхой байна.
+// Slot-с хоол хасна, дараа нь тухайн АНГИЛЛЫН үлдсэн зүйлсийг sort_order-оор
+// дахин 0..n-1 болгож дараалуулна — "үндсэн" сонголт (sort_order=0) үргэлж
+// тодорхой байна (бусад ангиллын дараалалд нөлөөлөхгүй).
 adminRouter.delete('/plan-items/:id', asyncHandler(async (req, res) => {
   const deleted = await pool.query(
     'DELETE FROM twelve_day_plan_items WHERE id = $1 RETURNING day_number, meal_time, menu_item_id',
@@ -313,15 +319,17 @@ adminRouter.delete('/plan-items/:id', asyncHandler(async (req, res) => {
   if (deleted.rows.length === 0) return res.status(404).json({ error: 'Олдсонгүй.' });
   const { day_number, meal_time } = deleted.rows[0];
 
-  const menuItem = await pool.query('SELECT restaurant_id FROM menu_items WHERE id = $1', [deleted.rows[0].menu_item_id]);
+  const menuItem = await pool.query('SELECT restaurant_id, category FROM menu_items WHERE id = $1', [deleted.rows[0].menu_item_id]);
   const restaurantId = menuItem.rows[0]?.restaurant_id;
+  const category = menuItem.rows[0]?.category;
   if (restaurantId) {
     const remaining = await pool.query(
       `SELECT pi.id FROM twelve_day_plan_items pi
        JOIN menu_items mi ON mi.id = pi.menu_item_id
        WHERE pi.day_number = $1 AND pi.meal_time = $2 AND mi.restaurant_id = $3
+         AND COALESCE(mi.category, '') = COALESCE($4, '')
        ORDER BY pi.sort_order`,
-      [day_number, meal_time, restaurantId]
+      [day_number, meal_time, restaurantId, category]
     );
     for (let i = 0; i < remaining.rows.length; i++) {
       await pool.query('UPDATE twelve_day_plan_items SET sort_order = $1 WHERE id = $2', [i, remaining.rows[i].id]);

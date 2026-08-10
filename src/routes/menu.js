@@ -41,7 +41,7 @@ menuRouter.get('/plan', asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT pi.id, pi.day_number, pi.meal_time, pi.menu_item_id, pi.sort_order,
-            mi.name, mi.price_usd, mi.image_url, mi.allergens, mi.diet_type_id, r.name AS restaurant_name
+            mi.name, mi.price_usd, mi.image_url, mi.allergens, mi.diet_type_id, mi.category, r.name AS restaurant_name
      FROM twelve_day_plan_items pi
      JOIN menu_items mi ON mi.id = pi.menu_item_id
      JOIN restaurants r ON r.id = mi.restaurant_id
@@ -66,8 +66,10 @@ menuRouter.get('/plan-cycle', asyncHandler(async (req, res) => {
 
 // GET /api/menu/plan-window?diet_type_id=... — зочинд ХАРАГДАХ бодит огнооны
 // цонх (өнөөдрөөс хамааран 12-аас цөөн байж болно, "1 хоногийн өмнө захиалах"
-// дүрмийн дагуу) + өдөр/цаг слот бүрийн admin-ийн тохируулсан ≤3 сонголт.
-// Auth шаардахгүй — session үүсэхээс ӨМНӨ зочин планаа урьдчилан харах ёстой.
+// дүрмийн дагуу) + өдөр/цаг слот бүрд admin-ийн тохируулсан АНГИЛАЛ тус
+// бүрийн ≤3 сонголт (`meals.morning = { "Main Course": [...], "Soup": [...] }`
+// гэх мэт — ямар ч тооны ангилал зэрэгцэн орж болно). Auth шаардахгүй —
+// session үүсэхээс ӨМНӨ зочин планаа урьдчилан харах ёстой.
 menuRouter.get('/plan-window', asyncHandler(async (req, res) => {
   const { diet_type_id } = req.query;
   const window = await resolvePlanWindow();
@@ -85,22 +87,25 @@ menuRouter.get('/plan-window', asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT pi.day_number, pi.meal_time, pi.sort_order, mi.id AS menu_item_id,
-            mi.name, mi.description, mi.price_usd, mi.image_url, mi.allergens
+            mi.name, mi.description, mi.price_usd, mi.image_url, mi.allergens,
+            COALESCE(mi.category, '') AS category
      FROM twelve_day_plan_items pi
      JOIN menu_items mi ON mi.id = pi.menu_item_id
      WHERE pi.day_number = ANY($1::int[]) AND mi.is_deleted = false ${filter}
-     ORDER BY pi.day_number, pi.meal_time, pi.sort_order`,
+     ORDER BY pi.day_number, pi.meal_time, mi.category, pi.sort_order`,
     params
   );
 
   const dayNumberToDate = Object.fromEntries(dates.map((d, i) => [dayNumbers[i], d]));
-  const days = dates.map(date => ({ date, meals: { morning: [], lunch: [], evening: [] } }));
+  const days = dates.map(date => ({ date, meals: { morning: {}, lunch: {}, evening: {} } }));
   const dayByDate = Object.fromEntries(days.map(d => [d.date, d]));
 
   for (const row of rows) {
     const date = dayNumberToDate[row.day_number];
     if (!date) continue;
-    dayByDate[date].meals[row.meal_time].push({
+    const mealGroup = dayByDate[date].meals[row.meal_time];
+    if (!mealGroup[row.category]) mealGroup[row.category] = [];
+    mealGroup[row.category].push({
       menu_item_id: row.menu_item_id,
       name: row.name,
       description: row.description,

@@ -84,22 +84,18 @@ function DayTabs({ dates, activeDate, onSelect, language }) {
   );
 }
 
-function MealSlot({ date, mealKey, label, options, selectedId, onSelect }) {
+// Нэг ангиллын (жишээ нь "Main Course") дотор зочны сонгосон хоол + swap.
+// meal-time (Өглөө/Өдөр/Орой) нь эцэг MealTimeSection-д нэг л удаа гарчиг
+// болж харагддаг тул энд caption нь АНГИЛЛЫН нэр байна.
+function CategorySlot({ date, mealKey, category, options, selectedId, onSelect }) {
   const [swapping, setSwapping] = useState(false);
   const selected = options.find(o => o.menu_item_id === selectedId) || options[0];
-  if (!selected) {
-    return (
-      <div style={{ padding: '14px 0', borderTop: '1px solid var(--border)' }}>
-        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</div>
-        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>—</p>
-      </div>
-    );
-  }
+  if (!selected) return null;
 
   return (
     <div style={{ padding: '16px 0', borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--brand-green)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</span>
+        <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--brand-green)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{category}</span>
         {options.length > 1 && (
           <button
             onClick={() => setSwapping(s => !s)}
@@ -138,7 +134,7 @@ function MealSlot({ date, mealKey, label, options, selectedId, onSelect }) {
           {options.map(opt => (
             <button
               key={opt.menu_item_id}
-              onClick={() => { onSelect(date, mealKey, opt.menu_item_id); setSwapping(false); }}
+              onClick={() => { onSelect(date, mealKey, category, opt.menu_item_id); setSwapping(false); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px 6px 6px', borderRadius: 10,
                 background: opt.menu_item_id === selected.menu_item_id ? 'var(--bg-muted)' : 'var(--bg-card)',
@@ -154,6 +150,34 @@ function MealSlot({ date, mealKey, label, options, selectedId, onSelect }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Нэг цагийн (Өглөө/Өдөр/Орой) бүлэг — гарчиг нэг л удаа, дотор нь тухайн
+// цагт admin-ийн тохируулсан ангилал тус бүрийг (Main Course, Soup, Snack гэх
+// мэт) тусдаа CategorySlot болгож жагсаана. Ямар ч ангилал тохируулаагүй бол
+// юу ч харуулахгүй (admin ямар ч ангилал нэмээгүй бол тухайн цаг алгасагдана).
+function MealTimeSection({ date, mealKey, label, categories, selections, onSelect }) {
+  const categoryEntries = Object.entries(categories);
+  if (categoryEntries.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)', marginTop: 14 }}>
+        {label}
+      </div>
+      {categoryEntries.map(([category, options]) => (
+        <CategorySlot
+          key={category}
+          date={date}
+          mealKey={mealKey}
+          category={category}
+          options={options}
+          selectedId={selections?.[category]}
+          onSelect={onSelect}
+        />
+      ))}
     </div>
   );
 }
@@ -221,7 +245,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
   const [data, setData] = useState(null); // { available, start_date, end_date, day_count, days }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selections, setSelections] = useState({}); // { [date]: { [mealKey]: menu_item_id } }
+  const [selections, setSelections] = useState({}); // { [date]: { [mealKey]: { [category]: menu_item_id } } }
   const [activeDate, setActiveDate] = useState(null);
   const [addonId, setAddonId] = useState(null);
 
@@ -237,7 +261,10 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
           for (const day of json.days) {
             init[day.date] = {};
             for (const meal of MEAL_KEYS) {
-              init[day.date][meal] = day.meals[meal]?.[0]?.menu_item_id ?? null;
+              init[day.date][meal] = {};
+              for (const [category, options] of Object.entries(day.meals[meal] || {})) {
+                init[day.date][meal][category] = options[0]?.menu_item_id ?? null;
+              }
             }
           }
           setSelections(init);
@@ -249,8 +276,14 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
       .finally(() => setLoading(false));
   }, [dietTypeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSelect = (date, mealKey, menuItemId) => {
-    setSelections(prev => ({ ...prev, [date]: { ...prev[date], [mealKey]: menuItemId } }));
+  const handleSelect = (date, mealKey, category, menuItemId) => {
+    setSelections(prev => ({
+      ...prev,
+      [date]: {
+        ...prev[date],
+        [mealKey]: { ...prev[date]?.[mealKey], [category]: menuItemId },
+      },
+    }));
   };
 
   const addonItem = addonId ? menuItems.find(i => i.id === addonId) : null;
@@ -260,9 +293,11 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
     let sum = 0;
     for (const day of data.days) {
       for (const meal of MEAL_KEYS) {
-        const selectedId = selections[day.date]?.[meal];
-        const opt = day.meals[meal]?.find(o => o.menu_item_id === selectedId) || day.meals[meal]?.[0];
-        if (opt) sum += Number(opt.price_usd);
+        for (const [category, options] of Object.entries(day.meals[meal] || {})) {
+          const selectedId = selections[day.date]?.[meal]?.[category];
+          const opt = options.find(o => o.menu_item_id === selectedId) || options[0];
+          if (opt) sum += Number(opt.price_usd);
+        }
       }
     }
     if (addonItem) sum += Number(addonItem.price_usd);
@@ -275,11 +310,13 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
     const reviewItems = [];
     for (const day of data.days) {
       for (const meal of MEAL_KEYS) {
-        const selectedId = selections[day.date]?.[meal] ?? day.meals[meal]?.[0]?.menu_item_id;
-        const opt = day.meals[meal]?.find(o => o.menu_item_id === selectedId);
-        if (!selectedId || !opt) continue;
-        flatSelections.push({ plan_date: day.date, meal_time: meal, menu_item_id: selectedId });
-        reviewItems.push({ date: day.date, meal, name: opt.name, price_usd: opt.price_usd });
+        for (const [category, options] of Object.entries(day.meals[meal] || {})) {
+          const selectedId = selections[day.date]?.[meal]?.[category] ?? options[0]?.menu_item_id;
+          const opt = options.find(o => o.menu_item_id === selectedId);
+          if (!selectedId || !opt) continue;
+          flatSelections.push({ plan_date: day.date, meal_time: meal, menu_item_id: selectedId });
+          reviewItems.push({ date: day.date, meal, category, name: opt.name, price_usd: opt.price_usd });
+        }
       }
     }
     onConfirmPlan(flatSelections, total, reviewItems, addonId);
@@ -329,13 +366,13 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
               {formatFullDate(activeDay.date, language)}
             </div>
             {MEAL_KEYS.map(meal => (
-              <MealSlot
+              <MealTimeSection
                 key={meal}
                 date={activeDay.date}
                 mealKey={meal}
                 label={mealLabels[meal]}
-                options={activeDay.meals[meal] || []}
-                selectedId={selections[activeDay.date]?.[meal]}
+                categories={activeDay.meals[meal] || {}}
+                selections={selections[activeDay.date]?.[meal]}
                 onSelect={handleSelect}
               />
             ))}

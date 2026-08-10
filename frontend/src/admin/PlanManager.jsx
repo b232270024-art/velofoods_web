@@ -48,7 +48,9 @@ function ExistingItemPicker({ menuItems, onPick }) {
             }}
           >
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-dark)' }}>{item.name}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>{item.restaurant_name} · ${Number(item.price_usd).toFixed(2)}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+              {item.category || 'Бусад'} · ${Number(item.price_usd).toFixed(2)}
+            </span>
           </button>
         ))}
       </div>
@@ -161,9 +163,17 @@ export function PlanManager() {
 
   const activeRestaurant = restaurants.find(r => r.id === selectedRestaurantId);
 
-  const dayItemsByMeal = useMemo(() => {
-    const map = { morning: [], lunch: [], evening: [] };
-    planItems.filter(p => p.day_number === selectedDay).forEach(p => map[p.meal_time]?.push(p));
+  // meal_time -> { category -> items[] } — нэг цагт хэд ч ангиллын хоол
+  // (Main Course, Soup, Snack гэх мэт) зэрэгцэн орж болно, ангилал тус бүр
+  // дотроо дээд тал нь 3 (1 үндсэн + 2 нөөц).
+  const dayItemsByMealCategory = useMemo(() => {
+    const map = { morning: {}, lunch: {}, evening: {} };
+    planItems.filter(p => p.day_number === selectedDay).forEach(p => {
+      const cat = p.category || 'Бусад';
+      const bucket = map[p.meal_time];
+      if (!bucket) return;
+      (bucket[cat] = bucket[cat] || []).push(p);
+    });
     return map;
   }, [planItems, selectedDay]);
 
@@ -230,8 +240,11 @@ export function PlanManager() {
         Ресторан тус бүр өөрийн 12 хоногийн цэстэй — доороос ресторанаа сонгоод өдөр тус бүрийн өглөө/өдөр/оройн хоолыг тохируулна.
       </p>
       <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 20 }}>
-        Слот бүрд дээд тал нь 3 хоол нэмэгдэнэ: хамгийн ЭХЭЛЖ нэмсэн нь зочинд "Үндсэн" (default)
-        сонголт болж, дараагийн 2 нь "Нөөц" болж зочин өөрөө сольж болно.
+        Нэг цагт (жишээ нь өглөө) хэд ч ангиллын (Main Course, Soup, Snack гэх мэт) хоол зэрэгцэн
+        орж болно — ямар хоол сонгосноос нь ангилал нь автоматаар тодорхойлогдоно. Ангилал тус
+        бүр дотроо дээд тал нь 3 хоол: хамгийн ЭХЭЛЖ нэмсэн нь зочинд "Үндсэн" (default) сонголт
+        болж, дараагийн 2 нь "Нөөц" болж зочин тухайн ангиллынхаа дотор сольж болно. Admin ямар
+        ч ангиллыг нэмэлгүй орхивол тэр ангилал тухайн өдөр/цагт огт харагдахгүй.
       </p>
 
       {error && (
@@ -292,58 +305,62 @@ export function PlanManager() {
       {/* Meal sections */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         {MEAL_TIMES.map(({ key, label }) => {
-          const slotFull = dayItemsByMeal[key].length >= 3;
+          const categoryGroups = Object.entries(dayItemsByMealCategory[key]);
           return (
             <div key={key} className="card" style={{ padding: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)' }}>{label}</h3>
                 <button
-                  onClick={() => !slotFull && setAddingSlot(key)}
-                  disabled={slotFull}
-                  title={slotFull ? '3/3 дүүрсэн — эхлээд нэгийг хасна уу' : undefined}
+                  onClick={() => setAddingSlot(key)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8,
-                    background: slotFull ? 'var(--bg-muted)' : 'var(--bg-muted)',
-                    color: slotFull ? 'var(--text-muted)' : 'inherit',
-                    fontWeight: 700, fontSize: '0.78rem',
-                    opacity: slotFull ? 0.6 : 1, cursor: slotFull ? 'not-allowed' : 'pointer',
+                    background: 'var(--bg-muted)', fontWeight: 700, fontSize: '0.78rem',
                   }}
                 >
-                  {slotFull ? '3/3 дүүрсэн' : <><Plus size={14} /> Хоол нэмэх</>}
+                  <Plus size={14} /> Хоол нэмэх
                 </button>
               </div>
 
-              {dayItemsByMeal[key].length === 0 ? (
+              {categoryGroups.length === 0 ? (
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Хоол сонгогдоогүй.</p>
               ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {dayItemsByMeal[key].map((p, idx) => (
-                    <div key={p.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '6px 8px 6px 10px', borderRadius: 10, background: 'var(--bg-muted)',
-                    }}>
-                      {p.image_url && <img src={p.image_url} alt="" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover' }} />}
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{
-                            fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: 999,
-                            background: idx === 0 ? 'var(--brand-green)' : 'var(--bg-card)',
-                            color: idx === 0 ? '#fff' : 'var(--text-muted)',
-                            border: idx === 0 ? 'none' : '1px solid var(--border)',
-                          }}>
-                            {SLOT_LABELS[idx] || `Нөөц ${idx}`}
-                          </span>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-dark)' }}>{p.name}</span>
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{p.restaurant_name} · ${Number(p.price_usd).toFixed(2)}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {categoryGroups.map(([category, items]) => (
+                    <div key={category}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 6 }}>
+                        {category} {items.length >= 3 && <span style={{ color: 'var(--brand-green)' }}>(3/3)</span>}
                       </div>
-                      <button
-                        onClick={() => removeItem(p.id)}
-                        title="Хасах"
-                        style={{ width: 22, height: 22, borderRadius: 6, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                      >
-                        <X size={12} />
-                      </button>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                        {items.map((p, idx) => (
+                          <div key={p.id} style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '6px 8px 6px 10px', borderRadius: 10, background: 'var(--bg-muted)',
+                          }}>
+                            {p.image_url && <img src={p.image_url} alt="" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover' }} />}
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{
+                                  fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: 999,
+                                  background: idx === 0 ? 'var(--brand-green)' : 'var(--bg-card)',
+                                  color: idx === 0 ? '#fff' : 'var(--text-muted)',
+                                  border: idx === 0 ? 'none' : '1px solid var(--border)',
+                                }}>
+                                  {SLOT_LABELS[idx] || `Нөөц ${idx}`}
+                                </span>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-dark)' }}>{p.name}</span>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{p.restaurant_name} · ${Number(p.price_usd).toFixed(2)}</div>
+                            </div>
+                            <button
+                              onClick={() => removeItem(p.id)}
+                              title="Хасах"
+                              style={{ width: 22, height: 22, borderRadius: 6, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
