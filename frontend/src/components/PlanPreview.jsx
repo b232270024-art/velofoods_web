@@ -1,11 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Utensils, RefreshCcw, AlertTriangle, Info, Check } from 'lucide-react';
+import { ChevronLeft, Utensils, RefreshCcw, AlertTriangle, Info, Check, Sunrise, Sun, Moon } from 'lucide-react';
 
 const MEAL_KEYS = ['morning', 'lunch', 'evening'];
 
 function getMealLabel(tr) {
   return { morning: tr.menuMealMorning || 'Morning', lunch: tr.menuMealLunch || 'Lunch', evening: tr.menuMealEvening || 'Evening' };
 }
+
+// Цаг тус бүрийг нэг харцаар ялгаж танихад зориулсан icon + өнгө (Өглөө/Өдөр/
+// Орой) — MealTimeSection-ий гарчгийг тод, бие даасан блок болгоход ашиглана.
+const MEAL_STYLE = {
+  morning: { icon: Sunrise, color: '#b45309', bg: '#fffbeb', border: '#fde68a' },
+  lunch:   { icon: Sun,     color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
+  evening: { icon: Moon,    color: '#4338ca', bg: '#eef2ff', border: '#c7d2fe' },
+};
 
 // 'YYYY-MM-DD' -> Date (UTC-ээр parse хийнэ — хуанлийн огноо тул локал TZ-ийн шилжилтээс зайлсхийнэ)
 function parsePlanDate(dateStr) {
@@ -84,53 +92,54 @@ function DayTabs({ dates, activeDate, onSelect, language }) {
   );
 }
 
-// Нэг ангиллын (жишээ нь "Main Course") дотор зочны сонгосон хоол + swap.
-// meal-time (Өглөө/Өдөр/Орой) нь эцэг MealTimeSection-д нэг л удаа гарчиг
-// болж харагддаг тул энд caption нь АНГИЛЛЫН нэр байна.
-function CategorySlot({ date, mealKey, category, options, selectedId, onSelect }) {
+// Нэг ангиллын (жишээ нь "Main Course") дотор зочны сонгосон хоол + swap —
+// том, тод карт хэлбэрээр (зураг том, нэр/үнэ илүү тодоор) харагдана. Meal-time
+// (Өглөө/Өдөр/Орой) нь эцэг MealTimeSection-д нэг л удаа гарчиг болж
+// харагддаг тул энд caption нь АНГИЛЛЫН нэр байна.
+function CategorySlot({ date, mealKey, category, options, selectedId, onSelect, accentColor }) {
   const [swapping, setSwapping] = useState(false);
   const selected = options.find(o => o.menu_item_id === selectedId) || options[0];
   if (!selected) return null;
 
   return (
-    <div style={{ padding: '16px 0', borderTop: '1px solid var(--border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--brand-green)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{category}</span>
+    <div className="card" style={{ padding: 18, marginTop: 10, border: '1px solid var(--border-card)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 800, color: accentColor || 'var(--brand-green)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{category}</span>
         {options.length > 1 && (
           <button
             onClick={() => setSwapping(s => !s)}
             style={{
-              display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999,
               background: swapping ? 'var(--brand-green)' : 'var(--bg-muted)', color: swapping ? '#fff' : 'var(--text-body)',
-              fontSize: '0.72rem', fontWeight: 700,
+              fontSize: '0.75rem', fontWeight: 700,
             }}
           >
-            <RefreshCcw size={11} /> {swapping ? 'Close' : 'Swap'}
+            <RefreshCcw size={12} /> {swapping ? 'Close' : 'Swap'}
           </button>
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
         {selected.image_url ? (
-          <img src={selected.image_url} alt="" style={{ width: 68, height: 68, borderRadius: 14, objectFit: 'cover', flexShrink: 0 }} />
+          <img src={selected.image_url} alt="" style={{ width: 104, height: 104, borderRadius: 16, objectFit: 'cover', flexShrink: 0 }} />
         ) : (
-          <div style={{ width: 68, height: 68, borderRadius: 14, background: 'var(--bg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Utensils size={26} color="var(--text-muted)" />
+          <div style={{ width: 104, height: 104, borderRadius: 16, background: 'var(--bg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Utensils size={34} color="var(--text-muted)" />
           </div>
         )}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-            <span style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-dark)' }}>{selected.name}</span>
-            <span style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--brand-green)', whiteSpace: 'nowrap' }}>${Number(selected.price_usd).toFixed(2)}</span>
+            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-dark)', lineHeight: 1.25 }}>{selected.name}</span>
+            <span style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--brand-green)', whiteSpace: 'nowrap' }}>${Number(selected.price_usd).toFixed(2)}</span>
           </div>
           {selected.description && (
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>{selected.description}</p>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.55 }}>{selected.description}</p>
           )}
         </div>
       </div>
 
       {swapping && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
           {options.map(opt => (
             <button
               key={opt.menu_item_id}
@@ -162,10 +171,19 @@ function MealTimeSection({ date, mealKey, label, categories, selections, onSelec
   const categoryEntries = Object.entries(categories);
   if (categoryEntries.length === 0) return null;
 
+  const cfg = MEAL_STYLE[mealKey] || MEAL_STYLE.morning;
+  const Icon = cfg.icon;
+
   return (
-    <div style={{ marginBottom: 6 }}>
-      <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)', marginTop: 14 }}>
-        {label}
+    <div style={{ marginBottom: 6, marginTop: 22 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999,
+        background: cfg.bg, border: `1.5px solid ${cfg.border}`, width: 'fit-content',
+      }}>
+        <Icon size={17} color={cfg.color} />
+        <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: cfg.color }}>
+          {label}
+        </span>
       </div>
       {categoryEntries.map(([category, options]) => (
         <CategorySlot
@@ -176,6 +194,7 @@ function MealTimeSection({ date, mealKey, label, categories, selections, onSelec
           options={options}
           selectedId={selections?.[category]}
           onSelect={onSelect}
+          accentColor={cfg.color}
         />
       ))}
     </div>
@@ -361,8 +380,8 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
         <>
           <DayTabs dates={data.days.map(d => d.date)} activeDate={activeDate} onSelect={setActiveDate} language={language} />
 
-          <div className="card" style={{ padding: '18px 22px' }}>
-            <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-dark)' }}>
+          <div className="card" style={{ padding: '18px 22px', background: 'var(--bg-muted)' }}>
+            <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-dark)' }}>
               {formatFullDate(activeDay.date, language)}
             </div>
             {MEAL_KEYS.map(meal => (
