@@ -1,9 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { pool } from '../db/pool.js';
 import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema } from '../middleware/validation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -58,21 +55,6 @@ adminRouter.get('/me', (req, res) => {
 adminRouter.use(requireAdmin);
 
 // Зургийн upload нь тусдаа /api/upload router-т байгаа (src/routes/upload.js).
-
-// Түр оношилгооны endpoint — Railway Volume mount path зөв эсэхийг шалгахад.
-// Ямар ч нууц мэдээлэл буцаахгүй (зөвхөн файлын зам/жагсаалт).
-adminRouter.get('/debug/uploads', (req, res) => {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const uploadsDir = path.join(__dirname, '../../public/uploads');
-  let files = [];
-  let error = null;
-  try {
-    files = fs.readdirSync(uploadsDir);
-  } catch (err) {
-    error = err.message;
-  }
-  res.json({ cwd: process.cwd(), uploadsDir, files, error });
-});
 
 // --- Ресторан нэмэх / нэр солих / ангилал оноох (Settings) -----------------
 adminRouter.post('/restaurants', validateBody(createRestaurantSchema), asyncHandler(async (req, res) => {
