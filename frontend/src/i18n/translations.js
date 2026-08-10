@@ -123,13 +123,19 @@ export const t = {
     menuAdded: 'In Cart',
     menuPlanTitle: '12-Day Meal Plan',
     menuPlanSubtitle: 'Your subscription includes:',
-    menuPlanItems: [
-      'Breakfast: Fresh pastries, eggs, coffee / tea',
-      'Lunch: Chef special soup, salad & main dish',
-      'Dinner: Gourmet steak, seafood or vegetarian option',
-      'Daily fresh fruits & dessert',
-    ],
     menuPlanConfirm: 'Confirm Subscription',
+    menuPlanDaysLabel: 'days',
+    menuPlanUnavailable: 'There is no active 12-day cycle available to order right now. Please check back soon.',
+    menuPlanAddonTitle: 'One more thing?',
+    menuPlanAddonDesc: "Our pick for you — add it to tomorrow's delivery. Optional, pick at most one.",
+    menuPlanAddonAdd: 'Add & Continue',
+    menuPlanAddonSkip: 'No thanks, continue',
+    menuPlanAddonReviewLabel: 'extra, delivered tomorrow',
+    menuPlanReviewTitle: 'Review your plan',
+    menuPlanInfoNote: 'Orders must be placed at least one day in advance, so your available days and price depend on when you order. Tap "Swap" on any meal to choose a different dish.',
+    menuPlanReviewChangeNote: 'Once paid, please contact us directly if you need to change any of your daily meal picks.',
+    loading: 'Loading...',
+    genericError: 'Something went wrong. Please try again.',
 
     // Cart
     cartTitle: 'Your Cart',
@@ -177,9 +183,6 @@ export const t = {
     // Menu — sectioned layout
     menuSpecialOffers: 'Special Offers',
     menuContinueBtn: 'Continue',
-    menuPlanPreviewTitle: 'Dishes included in your plan',
-    menuPlanScheduleTitle: 'Your day-by-day meal schedule',
-    menuPlanEmptyMeal: 'Sorry, no dish planned for this time yet.',
 
     // Order confirmation (payment collected separately for now)
     orderConfirmedTitle: 'Order Confirmed!',
@@ -322,12 +325,6 @@ export const t = {
     menuAdded: 'في السلة',
     menuPlanTitle: 'خطة 12 يوماً',
     menuPlanSubtitle: 'اشتراكك يشمل:',
-    menuPlanItems: [
-      'إفطار: معجنات طازجة وبيض وقهوة / شاي',
-      'غداء: حساء الشيف الخاص وسلطة وطبق رئيسي',
-      'عشاء: ستيك راقٍ أو مأكولات بحرية أو خيار نباتي',
-      'فواكه طازجة يومية وحلوى',
-    ],
     menuPlanConfirm: 'تأكيد الاشتراك',
     cartTitle: 'سلة التسوق',
     cartEmpty: 'سلتك فارغة',
@@ -367,9 +364,6 @@ export const t = {
 
     menuSpecialOffers: 'عروض خاصة',
     menuContinueBtn: 'متابعة',
-    menuPlanPreviewTitle: 'الأطباق المشمولة في خطتك',
-    menuPlanScheduleTitle: 'جدول وجباتك اليومي',
-    menuPlanEmptyMeal: 'عذرًا، لا يوجد طبق مخطط لهذا الوقت بعد.',
 
     orderConfirmedTitle: 'تم تأكيد الطلب!',
     orderConfirmedDesc: 'لقد استلمنا طلبك وسنتواصل معك قريباً. يتم تحصيل الدفع عند التسليم.',
@@ -410,6 +404,18 @@ export const t = {
     locationConfirmed: 'تم تأكيد الموقع — يمكنك تعديل الدبوس عند الحاجة',
     locationDetectFail: 'تعذّر تحديد الموقع — اضغط على الخريطة لتحديده يدوياً',
     locationRequiredHint: 'حدد موقع التوصيل على الخريطة أعلاه للمتابعة.',
+    menuPlanDaysLabel: "أيام",
+    menuPlanUnavailable: "لا توجد دورة نشطة مدتها 12 يومًا متاحة للطلب في الوقت الحالي. يُرجى التحقق مرة أخرى قريبًا.",
+    menuPlanAddonTitle: "امر واحد اخر ؟",
+    menuPlanAddonDesc: "اخترنا لك — أضفه إلى خدمة التوصيل غدًا. اختياري، اختر واحدة على الأكثر.",
+    menuPlanAddonAdd: "إضافة ومتابعة",
+    menuPlanAddonSkip: "لا شكراً، تابع",
+    menuPlanAddonReviewLabel: "إضافي، يتم توصيله غدًا",
+    menuPlanReviewTitle: "مراجعة خطتك:",
+    loading: "جاري التحميل...",
+    genericError: "لقد حدث خطأ ما. برجاء إعادة المحاولة.",
+    menuPlanInfoNote: "يجب تقديم الطلبات قبل يوم واحد على الأقل، لذلك تعتمد الأيام المتاحة والسعر على وقت الطلب. اضغط على \"تبديل\" في أي وجبة لاختيار طبق مختلف.",
+    menuPlanReviewChangeNote: "بمجرد الدفع، يرجى الاتصال بنا مباشرة إذا كنت بحاجة إلى تغيير أي من اختيارات الوجبات اليومية.",
   },
 
   hi: {
@@ -507,12 +513,6 @@ export const t = {
     menuAdded: 'कार्ट में है',
     menuPlanTitle: '12-दिन की योजना',
     menuPlanSubtitle: 'आपकी सब्सक्रिप्शन में शामिल:',
-    menuPlanItems: [
-      'नाश्ता: ताजी पेस्ट्री, अंडे, कॉफी / चाय',
-      'दोपहर का खाना: शेफ विशेष सूप, सलाद और मुख्य डिश',
-      'रात का खाना: गोर्मेट स्टेक, सीफूड या शाकाहारी विकल्प',
-      'रोज ताजे फल और मिठाई',
-    ],
     menuPlanConfirm: 'सब्सक्रिप्शन की पुष्टि करें',
     cartTitle: 'आपकी कार्ट',
     cartEmpty: 'आपकी कार्ट खाली है',
@@ -552,9 +552,6 @@ export const t = {
 
     menuSpecialOffers: 'विशेष ऑफर',
     menuContinueBtn: 'जारी रखें',
-    menuPlanPreviewTitle: 'आपकी योजना में शामिल व्यंजन',
-    menuPlanScheduleTitle: 'आपकी दिन-प्रतिदिन भोजन अनुसूची',
-    menuPlanEmptyMeal: 'क्षमा करें, इस समय के लिए अभी तक कोई व्यंजन तय नहीं है।',
 
     orderConfirmedTitle: 'ऑर्डर की पुष्टि हो गई!',
     orderConfirmedDesc: 'हमें आपका ऑर्डर मिल गया है और हम जल्द ही आपसे संपर्क करेंगे। भुगतान डिलीवरी पर लिया जाता है।',
@@ -595,6 +592,18 @@ export const t = {
     locationConfirmed: 'स्थान की पुष्टि हो गई — जरूरत हो तो पिन समायोजित करें',
     locationDetectFail: 'स्थान पता नहीं लगाया जा सका — इसे मैन्युअल रूप से सेट करने के लिए मानचित्र पर टैप करें',
     locationRequiredHint: 'जारी रखने के लिए ऊपर मानचित्र पर अपना डिलीवरी स्थान सेट करें।',
+    menuPlanDaysLabel: "दिन",
+    menuPlanUnavailable: "अभी ऑर्डर करने के लिए 12 - दिन का कोई सक्रिय चक्र उपलब्ध नहीं है। कृपया जल्द ही फिर से देखें।",
+    menuPlanAddonTitle: "मुझे लगता है कि मैं थोड़ी सी काम करता हूं",
+    menuPlanAddonDesc: "हम आपके लिए चुनते हैं — इसे कल की डिलीवरी में शामिल करें। ज़रूरी नहीं, ज़्यादा - से - ज़्यादा एक चुनें।",
+    menuPlanAddonAdd: "जोड़ें और जारी रखें",
+    menuPlanAddonSkip: "नहीं, धन्यवाद, जारी रखें",
+    menuPlanAddonReviewLabel: "अतिरिक्त, कल डिलीवर किया जाएगा",
+    menuPlanReviewTitle: "अपनी योजना पर गौर करें",
+    loading: "लोड कर रहा है...",
+    genericError: "कोई गड़बड़ हो गई, कृपया दोबारा कोशिश करें।",
+    menuPlanInfoNote: "ऑर्डर कम - से - कम एक दिन पहले दिए जाने चाहिए, इसलिए आपके उपलब्ध दिन और किराया इस बात पर निर्भर करता है कि आप कब ऑर्डर करते हैं। कोई दूसरा व्यंजन चुनने के लिए किसी भी खाने पर \"स्वैप करें\" पर टैप करें।",
+    menuPlanReviewChangeNote: "भुगतान करने के बाद, अगर आपको अपनी रोज़मर्रा की खाने की कोई भी पसंद बदलनी है, तो कृपया हमसे सीधे संपर्क करें।",
   },
 };
 

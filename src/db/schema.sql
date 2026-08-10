@@ -3,6 +3,7 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 DROP TABLE IF EXISTS twelve_day_plan_items CASCADE;
+DROP TABLE IF EXISTS twelve_day_cycle_settings CASCADE;
 DROP TABLE IF EXISTS payments CASCADE;
 DROP TABLE IF EXISTS order_items CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
@@ -91,17 +92,25 @@ CREATE TABLE menu_items (
   available     boolean NOT NULL DEFAULT true,
   is_deleted    boolean NOT NULL DEFAULT false,
   restaurant_id uuid NOT NULL REFERENCES restaurants(id),
-  stock_limit   integer -- Өдөр тутам 0-ээс дахин эхэлдэг лимит (NULL = хязгааргүй)
+  stock_limit   integer, -- Өдөр тутам 0-ээс дахин эхэлдэг лимит (NULL = хязгааргүй)
+  -- 12 хоногийн планы сүүлийн хуудсанд "санал болгох" зууш/амттан гэж тэмдэглэнэ.
+  is_addon_recommended boolean NOT NULL DEFAULT false
 );
 CREATE INDEX idx_menu_items_diet  ON menu_items(diet_type_id);
 CREATE INDEX idx_menu_items_restaurant ON menu_items(restaurant_id);
 
 CREATE TABLE orders (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id   uuid NOT NULL REFERENCES sessions(id),
-  status       order_status NOT NULL DEFAULT 'pending',
-  total_usd    numeric(10,2) NOT NULL DEFAULT 0,
-  created_at   timestamptz NOT NULL DEFAULT now()
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id       uuid NOT NULL REFERENCES sessions(id),
+  status           order_status NOT NULL DEFAULT 'pending',
+  total_usd        numeric(10,2) NOT NULL DEFAULT 0,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  -- Зөвхөн 12 хоногийн план захиалгад бөглөгдөнө (one_time дээр NULL) — тухайн
+  -- худалдан авалтын үед тооцоологдсон огнооны цонхыг царцаана, эргэлтийн
+  -- start_date дараа өөрчлөгдсөн ч хуучин захиалга өөрчлөгдөхгүй.
+  plan_start_date  date,
+  plan_end_date    date,
+  plan_day_count   integer
 );
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_session ON orders(session_id);
@@ -112,22 +121,38 @@ CREATE TABLE order_items (
   menu_item_id     uuid NOT NULL REFERENCES menu_items(id),
   guest_name       text NOT NULL,
   quantity         integer NOT NULL CHECK (quantity > 0),
-  unit_price_usd   numeric(10,2) NOT NULL
+  unit_price_usd   numeric(10,2) NOT NULL,
+  -- Зөвхөн 12 хоногийн план захиалгад бөглөгдөнө — аль өдөр/цагийн хоол болохыг
+  -- тэмдэглэнэ. is_addon=true бол сүүлийн хуудсан дээр сонгосон нэмэлт зүйл.
+  plan_date        date,
+  plan_meal_time   meal_time,
+  is_addon         boolean NOT NULL DEFAULT false
 );
 CREATE INDEX idx_order_items_order ON order_items(order_id);
 
 -- Admin-ийн удирддаг "12 хоногийн цэс" — өдөр (1-12) тус бүрийн
 -- өглөө/өдөр/оройн хоолонд ямар menu item(ууд) орохыг тодорхойлно.
 -- Ресторан/ангилал нь menu_item_id-ээр дамжуулан аль хэдийн тодорхойлогддог.
+-- sort_order: 0 = үндсэн (default) сонголт, 1-2 = зочны сольж болох нөөц хоол
+-- (слот бүрд дээд тал нь 3 — app-level-д admin.js POST /plan-items шалгана).
 CREATE TABLE twelve_day_plan_items (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   day_number    integer NOT NULL CHECK (day_number BETWEEN 1 AND 12),
   meal_time     meal_time NOT NULL,
   menu_item_id  uuid NOT NULL REFERENCES menu_items(id),
+  sort_order    smallint NOT NULL DEFAULT 0,
   created_at    timestamptz NOT NULL DEFAULT now(),
   UNIQUE (day_number, meal_time, menu_item_id)
 );
 CREATE INDEX idx_plan_items_day ON twelve_day_plan_items(day_number);
+
+-- 12 хоногийн идэвхтэй эргэлтийн эхлэх огноо (singleton мөр) — admin Тохиргоо
+-- хуудаснаас өөрчилнө. end_date = start_date + 11 хоног (тооцоолж хадгалахгүй).
+CREATE TABLE twelve_day_cycle_settings (
+  id          boolean PRIMARY KEY DEFAULT true CHECK (id),
+  start_date  date NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE TABLE payments (
   id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -212,4 +237,7 @@ INSERT INTO menu_items (id, name, description, category, diet_type_id, price_usd
  'Freshly Squeezed Orange Juice',
  'Chilled fresh orange juice. Vegan, gluten-free.',
  'Dessert & Drinks', 'd3333333-3333-3333-3333-333333333333', 6.00, NULL, 110, '{}', 3, false, true, 'c3333333-3333-3333-3333-333333333333', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO twelve_day_cycle_settings (id, start_date) VALUES (true, '2026-08-17')
 ON CONFLICT (id) DO NOTHING;

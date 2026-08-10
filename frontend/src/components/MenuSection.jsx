@@ -2,90 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Plus, Minus, ArrowRight, ChevronLeft, Utensils, Sparkles } from 'lucide-react';
 
-// Fetches the admin-configured day-by-day meal plan and shows it per day. Read-only (no cart).
-function getMealTimeLabel(tr) {
-  return {
-    morning: tr.menuMealMorning || 'Morning',
-    lunch:   tr.menuMealLunch   || 'Lunch',
-    evening: tr.menuMealEvening || 'Evening',
-  };
-}
-
-function DayPlanPreview({ planItems, tr }) {
-  const [selectedDay, setSelectedDay] = useState(1);
-
-  const daysWithItems = [...new Set(planItems.map(p => p.day_number))].sort((a, b) => a - b);
-  const activeDay = daysWithItems.includes(selectedDay) ? selectedDay : daysWithItems[0];
-  const byMeal = { morning: [], lunch: [], evening: [] };
-  planItems.filter(p => p.day_number === activeDay).forEach(p => byMeal[p.meal_time]?.push(p));
-
-  return (
-    <div style={{ marginBottom: 32 }}>
-      <h3 style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-dark)', marginBottom: 16 }}>
-        {tr.menuPlanScheduleTitle}
-      </h3>
-
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {daysWithItems.map(day => (
-          <button
-            key={day}
-            onClick={() => setSelectedDay(day)}
-            style={{
-              width: 40, height: 40, borderRadius: 10, fontWeight: 800, fontSize: '0.85rem',
-              background: activeDay === day ? 'var(--brand-green)' : 'var(--bg-muted)',
-              color: activeDay === day ? '#fff' : 'var(--text-body)',
-            }}
-          >
-            {day}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {Object.entries(getMealTimeLabel(tr)).map(([key, label]) => (
-          <div key={key} className="card" style={{ padding: 20 }}>
-            <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)', marginBottom: 14 }}>{label}</div>
-            {byMeal[key].length === 0 ? (
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                {tr.menuPlanEmptyMeal || 'Sorry, no dish planned for this time yet.'}
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {byMeal[key].map(item => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    {item.image_url
-                      ? <img src={item.image_url} alt="" style={{ width: 76, height: 76, borderRadius: 16, objectFit: 'cover', flexShrink: 0 }} />
-                      : (
-                        <div style={{
-                          width: 76, height: 76, borderRadius: 16, background: 'var(--bg-muted)', flexShrink: 0,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <Utensils size={28} color="var(--text-muted)" />
-                        </div>
-                      )}
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-dark)' }}>{item.name}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 2 }}>{item.restaurant_name}</div>
-                      {item.description && (
-                        <div style={{
-                          fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5,
-                          overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                        }}>
-                          {item.description}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function BackButton({ label, onBack }) {
   return (
     <button
@@ -289,20 +205,10 @@ function CardGrid({ items, getQty, onAddToCart, onRemoveFromCart, readOnly }) {
   );
 }
 
-export function MenuSection({ menuItems, cart, orderType, dietTypeId, tr, onAddToCart, onRemoveFromCart, onConfirmPlan, onContinueToDelivery, onBack }) {
+export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart, onContinueToDelivery, onBack }) {
   const [search, setSearch] = useState('');
   const [dietFilter, setDietFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('All');
-  const [planItems, setPlanItems] = useState(null); // admin-ийн тохируулсан 12 хоногийн хуваарь (12-day preview-д ашиглана)
-
-  useEffect(() => {
-    if (orderType !== 'twelve_day') return;
-    const qs = dietTypeId ? `?diet_type_id=${dietTypeId}` : '';
-    fetch(`/api/menu/plan${qs}`)
-      .then(r => r.json())
-      .then(data => setPlanItems(Array.isArray(data) ? data : []))
-      .catch(() => setPlanItems([]));
-  }, [orderType, dietTypeId]);
 
   const categories = useMemo(() => {
     const cats = [...new Set(menuItems.map(i => i.category).filter(Boolean))];
@@ -332,55 +238,6 @@ export function MenuSection({ menuItems, cart, orderType, dietTypeId, tr, onAddT
   const getQty = (id) => cart.find(c => c.menu_item_id === id)?.quantity ?? 0;
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + Number(i.price_usd) * i.quantity, 0);
-
-  // ── 12-Day Plan Preview ────────────────────────────────────────────────────────
-  if (orderType === 'twelve_day') {
-    // Admin-ийн 12-day plan хараахан бөглөгдөөгүй үед сонгосон ангиллын хоолыг л
-    // харуулна — эс бөгөөс "Halal" сонгосон зочинд бусад ангиллын хоол ч харагдана.
-    const fallbackItems = dietTypeId ? menuItems.filter(i => i.diet_type_id === dietTypeId) : menuItems;
-    return (
-      <div className="anim-fade-up" style={{ maxWidth: 900, margin: '0 auto', padding: '40px 0 100px' }}>
-        <BackButton label={tr.back} onBack={onBack} />
-        <h2 className="heading-lg" style={{ marginBottom: 8 }}>{tr.menuPlanTitle}</h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: 32 }}>{tr.menuPlanSubtitle}</p>
-        <div className="card" style={{ padding: 32, marginBottom: 32 }}>
-          <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {tr.menuPlanItems.map((item, i) => (
-              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  background: 'var(--brand-green)', color: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem', fontWeight: 800, flexShrink: 0,
-                }}>✓</div>
-                <span style={{ color: 'var(--text-body)', fontSize: '0.95rem', lineHeight: 1.6 }}>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {planItems && planItems.length > 0 ? (
-          <DayPlanPreview planItems={planItems} tr={tr} />
-        ) : fallbackItems.length > 0 && (
-          <div style={{ marginBottom: 32 }}>
-            <h3 style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-dark)', marginBottom: 16 }}>
-              {tr.menuPlanPreviewTitle}
-            </h3>
-            <CardGrid items={fallbackItems} getQty={getQty} readOnly />
-          </div>
-        )}
-
-        <button
-          id="confirm-plan-btn"
-          className="btn-primary"
-          onClick={onConfirmPlan}
-          style={{ width: '100%', padding: 16, justifyContent: 'center', borderRadius: 14 }}
-        >
-          {tr.menuPlanConfirm}
-        </button>
-      </div>
-    );
-  }
 
   // ── One-time: Full Menu View ───────────────────────────────────────────────────
   const featuredItems = menuItems.filter(i => i.is_featured);

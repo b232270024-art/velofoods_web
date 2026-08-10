@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { requireSession } from '../middleware/auth.js';
-import { validateBody, createOrderSchema } from '../middleware/validation.js';
+import { validateBody, createOrderSchema, createPlanOrderSchema } from '../middleware/validation.js';
+import { resolvePlanWindow, dateToDayNumber, enumerateDates } from '../services/twelveDayPlan.js';
 
 export const ordersRouter = Router();
+
+const PLAN_MEAL_TIMES = ['morning', 'lunch', 'evening'];
 
 // items: [{ menu_item_id, quantity, guest_name }]
 ordersRouter.post('/', requireSession, validateBody(createOrderSchema), async (req, res) => {
@@ -115,6 +118,125 @@ ordersRouter.post('/', requireSession, validateBody(createOrderSchema), async (r
   }
 });
 
+// 12 хоногийн зочны сонголтуудаас (болон сонголт бол 1 нэмэлт зүйлээс) захиалга
+// үүсгэнэ. Үнэ болон сонголтын хүчинтэй эсэхийг бүхэлд нь СЕРВЕРТ дахин
+// тооцоолж баталгаажуулна — клиентээс ирсэн юуг ч (огноо, үнэ) итгэмжлэхгүй.
+ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), async (req, res) => {
+  const { selections, addon_menu_item_id } = req.body;
+  const { session_id } = req.session;
+
+  const sessionRes = await pool.query(
+    'SELECT id, guest_name, order_type, diet_type_id FROM sessions WHERE id = $1',
+    [session_id]
+  );
+  if (sessionRes.rows.length === 0) return res.status(404).json({ error: 'Session олдсонгүй.' });
+  const session = sessionRes.rows[0];
+  if (session.order_type !== 'twelve_day') {
+    return res.status(400).json({ error: 'Энэ session 12 хоногийн төрлийн захиалгад зориулагдаагүй байна.' });
+  }
+  if (!session.diet_type_id) {
+    return res.status(400).json({ error: 'Session дээр ангилал сонгогдоогүй байна.' });
+  }
+
+  const window = await resolvePlanWindow();
+  if (!window.available) {
+    return res.status(400).json({ error: 'Одоогоор идэвхтэй 12 хоногийн эргэлт байхгүй байна.' });
+  }
+
+  // Тухайн зочинд харагдах ёстой (огноо × цаг) слотуудыг серверт дахин
+  // тооцоолж, ирсэн selections яг үүнтэй нэг мөр таарч байгааг шалгана.
+  const expectedDates = enumerateDates(window.firstAvailableDate, window.endDate);
+  const expectedSlots = new Set();
+  for (const date of expectedDates) {
+    for (const mealTime of PLAN_MEAL_TIMES) expectedSlots.add(`${date}|${mealTime}`);
+  }
+  if (selections.length !== expectedSlots.size) {
+    return res.status(400).json({ error: 'Сонголтын тоо тухайн үеийн өдөр/цагийн тоотой таарахгүй байна.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const seenSlots = new Set();
+    const resolvedItems = [];
+    let total = 0;
+
+    for (const sel of selections) {
+      const slotKey = `${sel.plan_date}|${sel.meal_time}`;
+      if (!expectedSlots.has(slotKey)) throw new Error(`Буруу огноо/цаг: ${slotKey}`);
+      if (seenSlots.has(slotKey)) throw new Error(`Давхардсан сонголт: ${slotKey}`);
+      seenSlots.add(slotKey);
+
+      const dayNumber = dateToDayNumber(sel.plan_date, window.cycleStartDate);
+      // Сонголт нь admin-ийн тухайн слотод зөвшөөрсөн (1 үндсэн + ≤2 нөөц)
+      // хоолнуудын нэг мөн эсэхийг, мөн зочны ангилалтай тохирч байгааг шалгана.
+      const option = await client.query(
+        `SELECT mi.price_usd FROM twelve_day_plan_items pi
+         JOIN menu_items mi ON mi.id = pi.menu_item_id
+         WHERE pi.day_number = $1 AND pi.meal_time = $2 AND pi.menu_item_id = $3
+           AND mi.diet_type_id = $4 AND mi.is_deleted = false`,
+        [dayNumber, sel.meal_time, sel.menu_item_id, session.diet_type_id]
+      );
+      if (option.rows.length === 0) throw new Error(`Буруу сонголт: ${sel.plan_date} ${sel.meal_time}`);
+
+      const unitPrice = Number(option.rows[0].price_usd);
+      total += unitPrice;
+      resolvedItems.push({ menu_item_id: sel.menu_item_id, plan_date: sel.plan_date, meal_time: sel.meal_time, unitPrice });
+    }
+
+    let addonUnitPrice = null;
+    if (addon_menu_item_id) {
+      const addon = await client.query(
+        `SELECT price_usd FROM menu_items
+         WHERE id = $1 AND is_addon_recommended = true AND is_deleted = false AND available = true`,
+        [addon_menu_item_id]
+      );
+      if (addon.rows.length === 0) throw new Error('Сонгосон нэмэлт зүйл боломжгүй байна.');
+      addonUnitPrice = Number(addon.rows[0].price_usd);
+      total += addonUnitPrice;
+    }
+
+    const orderRes = await client.query(
+      `INSERT INTO orders (session_id, status, total_usd, plan_start_date, plan_end_date, plan_day_count)
+       VALUES ($1, 'pending', $2, $3, $4, $5) RETURNING id`,
+      [session_id, total, window.firstAvailableDate, window.endDate, window.dayCount]
+    );
+    const orderId = orderRes.rows[0].id;
+
+    for (const item of resolvedItems) {
+      await client.query(
+        `INSERT INTO order_items (order_id, menu_item_id, guest_name, quantity, unit_price_usd, plan_date, plan_meal_time, is_addon)
+         VALUES ($1, $2, $3, 1, $4, $5, $6, false)`,
+        [orderId, item.menu_item_id, session.guest_name, item.unitPrice, item.plan_date, item.meal_time]
+      );
+    }
+
+    if (addon_menu_item_id) {
+      await client.query(
+        `INSERT INTO order_items (order_id, menu_item_id, guest_name, quantity, unit_price_usd, plan_date, plan_meal_time, is_addon)
+         VALUES ($1, $2, $3, 1, $4, $5, NULL, true)`,
+        [orderId, addon_menu_item_id, session.guest_name, addonUnitPrice, window.firstAvailableDate]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    const fullOrder = await pool.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+
+    const io = req.app.get('io');
+    io.to('admin').emit('order:new', fullOrder.rows[0]);
+
+    res.status(201).json(fullOrder.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    req.app.get('logger').error('12 хоногийн захиалга үүсгэхэд алдаа гарлаа', { error: err.message });
+    res.status(400).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 ordersRouter.get('/:id', requireSession, async (req, res) => {
   const order = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
   if (order.rows.length === 0) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
@@ -122,7 +244,8 @@ ordersRouter.get('/:id', requireSession, async (req, res) => {
   const items = await pool.query(
     `SELECT oi.*, mi.name FROM order_items oi
      JOIN menu_items mi ON mi.id = oi.menu_item_id
-     WHERE oi.order_id = $1`,
+     WHERE oi.order_id = $1
+     ORDER BY oi.plan_date NULLS LAST, oi.plan_meal_time`,
     [req.params.id]
   );
   res.json({ ...order.rows[0], items: items.rows });

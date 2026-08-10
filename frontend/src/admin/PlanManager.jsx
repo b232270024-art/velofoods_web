@@ -9,6 +9,17 @@ const MEAL_TIMES = [
   { key: 'evening', label: 'Орой' },
 ];
 
+const SLOT_LABELS = ['Үндсэн', 'Нөөц 1', 'Нөөц 2'];
+
+// day_number (1-12) -> тухайн эргэлтийн бодит огноо ('sar/ödör' богино формат).
+// cycleStartDate нь 'YYYY-MM-DD' — Date.UTC-ээр тооцоолж локал TZ-ийн урвуулалтаас зайлсхийнэ.
+function dayNumberToLabel(dayNumber, cycleStartDate) {
+  if (!cycleStartDate) return null;
+  const [y, m, d] = cycleStartDate.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + (dayNumber - 1)));
+  return `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}`;
+}
+
 function ExistingItemPicker({ menuItems, onPick }) {
   const [search, setSearch] = useState('');
   const filtered = menuItems.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
@@ -110,17 +121,20 @@ export function PlanManager() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
+  const [cycleStartDate, setCycleStartDate] = useState(null);
 
   useEffect(() => {
     Promise.all([
       fetch('/api/menu/restaurants').then(r => r.json()),
       fetch('/api/menu/diet-types').then(r => r.json()),
-    ]).then(([r, d]) => {
+      fetch('/api/admin/plan-cycle').then(r => r.json()),
+    ]).then(([r, d, cycle]) => {
       if (Array.isArray(r)) {
         setRestaurants(r);
         setSelectedRestaurantId(prev => prev ?? r[0]?.id ?? null);
       }
       if (Array.isArray(d)) setDietTypes(d);
+      if (cycle?.start_date) setCycleStartDate(cycle.start_date);
     }).catch(() => setError('Мэдээлэл татахад алдаа гарлаа.'));
   }, []);
 
@@ -212,8 +226,12 @@ export function PlanManager() {
   return (
     <div>
       <h2 className="heading-md" style={{ marginBottom: 6 }}>12 хоногийн цэс</h2>
-      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 20 }}>
+      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 6 }}>
         Ресторан тус бүр өөрийн 12 хоногийн цэстэй — доороос ресторанаа сонгоод өдөр тус бүрийн өглөө/өдөр/оройн хоолыг тохируулна.
+      </p>
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 20 }}>
+        Слот бүрд дээд тал нь 3 хоол нэмэгдэнэ: хамгийн ЭХЭЛЖ нэмсэн нь зочинд "Үндсэн" (default)
+        сонголт болж, дараагийн 2 нь "Нөөц" болж зочин өөрөө сольж болно.
       </p>
 
       {error && (
@@ -255,57 +273,84 @@ export function PlanManager() {
             key={day}
             onClick={() => setSelectedDay(day)}
             style={{
-              width: 42, height: 42, borderRadius: 10, fontWeight: 800, fontSize: '0.88rem',
+              width: 52, height: 48, borderRadius: 10, fontWeight: 800, fontSize: '0.88rem',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
               background: selectedDay === day ? 'var(--brand-green)' : 'var(--bg-muted)',
               color: selectedDay === day ? '#fff' : 'var(--text-body)',
             }}
           >
-            {day}
+            <span>{day}</span>
+            {cycleStartDate && (
+              <span style={{ fontSize: '0.62rem', fontWeight: 600, opacity: 0.8 }}>
+                {dayNumberToLabel(day, cycleStartDate)}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
       {/* Meal sections */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {MEAL_TIMES.map(({ key, label }) => (
-          <div key={key} className="card" style={{ padding: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)' }}>{label}</h3>
-              <button
-                onClick={() => setAddingSlot(key)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'var(--bg-muted)', fontWeight: 700, fontSize: '0.78rem' }}
-              >
-                <Plus size={14} /> Хоол нэмэх
-              </button>
-            </div>
-
-            {dayItemsByMeal[key].length === 0 ? (
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Хоол сонгогдоогүй.</p>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {dayItemsByMeal[key].map(p => (
-                  <div key={p.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '6px 8px 6px 10px', borderRadius: 10, background: 'var(--bg-muted)',
-                  }}>
-                    {p.image_url && <img src={p.image_url} alt="" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover' }} />}
-                    <div>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-dark)' }}>{p.name}</div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{p.restaurant_name} · ${Number(p.price_usd).toFixed(2)}</div>
-                    </div>
-                    <button
-                      onClick={() => removeItem(p.id)}
-                      title="Хасах"
-                      style={{ width: 22, height: 22, borderRadius: 6, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
+        {MEAL_TIMES.map(({ key, label }) => {
+          const slotFull = dayItemsByMeal[key].length >= 3;
+          return (
+            <div key={key} className="card" style={{ padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)' }}>{label}</h3>
+                <button
+                  onClick={() => !slotFull && setAddingSlot(key)}
+                  disabled={slotFull}
+                  title={slotFull ? '3/3 дүүрсэн — эхлээд нэгийг хасна уу' : undefined}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8,
+                    background: slotFull ? 'var(--bg-muted)' : 'var(--bg-muted)',
+                    color: slotFull ? 'var(--text-muted)' : 'inherit',
+                    fontWeight: 700, fontSize: '0.78rem',
+                    opacity: slotFull ? 0.6 : 1, cursor: slotFull ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {slotFull ? '3/3 дүүрсэн' : <><Plus size={14} /> Хоол нэмэх</>}
+                </button>
               </div>
-            )}
-          </div>
-        ))}
+
+              {dayItemsByMeal[key].length === 0 ? (
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Хоол сонгогдоогүй.</p>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {dayItemsByMeal[key].map((p, idx) => (
+                    <div key={p.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '6px 8px 6px 10px', borderRadius: 10, background: 'var(--bg-muted)',
+                    }}>
+                      {p.image_url && <img src={p.image_url} alt="" style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover' }} />}
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{
+                            fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', borderRadius: 999,
+                            background: idx === 0 ? 'var(--brand-green)' : 'var(--bg-card)',
+                            color: idx === 0 ? '#fff' : 'var(--text-muted)',
+                            border: idx === 0 ? 'none' : '1px solid var(--border)',
+                          }}>
+                            {SLOT_LABELS[idx] || `Нөөц ${idx}`}
+                          </span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-dark)' }}>{p.name}</span>
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{p.restaurant_name} · ${Number(p.price_usd).toFixed(2)}</div>
+                      </div>
+                      <button
+                        onClick={() => removeItem(p.id)}
+                        title="Хасах"
+                        style={{ width: 22, height: 22, borderRadius: 6, background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <button

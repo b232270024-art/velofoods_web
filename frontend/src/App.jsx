@@ -13,6 +13,9 @@ import { DietTypeSelection } from './components/DietTypeSelection';
 import { DeliveryTypeSelection } from './components/DeliveryTypeSelection';
 import { GuestDetailsModal } from './components/GuestDetailsModal';
 import { MenuSection } from './components/MenuSection';
+import { PlanPreview } from './components/PlanPreview';
+import { PlanAddonStep } from './components/PlanAddonStep';
+import { PlanReviewStep } from './components/PlanReviewStep';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderReview } from './components/OrderReview';
 import { TermsModal } from './components/TermsModal';
@@ -26,13 +29,16 @@ import { addOrderToHistory, getOrderHistory } from './lib/orderHistory';
 // 'hero'            → landing page (Hero + Special Offers + How it works + About)
 // 'order_type'      → Select an order type screen (12-day plan / one-time)
 // 'diet_type_select'→ (12-day) pick which restaurant/diet-type's plan to preview
-// 'plan_preview'    → (12-day) real menu preview + Confirm → guest details → confirmation
+// 'plan_preview'    → (12-day) real date-based plan, guest can swap each meal slot
+//                     among admin's ≤3 options → Confirm → guest details modal
+// 'plan_addon'      → (12-day) admin's "recommended extra" upsell (skippable)
+// 'plan_review'     → (12-day) day-by-day summary + terms + Pay → Hipay checkout
 // 'menu'            → (one-time) full menu, cart, "Continue" once cart has items
 // 'delivery_type'   → (one-time) hotel room vs current location
-// 'confirmation'    → order/plan confirmed (payment collected on delivery, no gateway yet)
+// 'confirmation'    → order/plan confirmed (payment collected via Hipay)
 // 'order_history'   → browser-remembered list of this guest's past orders (Header button)
 // ─────────────────────────────────────────────────────────────────────────────
-const FLOW_STEPS = ['hero', 'about_us', 'order_type', 'diet_type_select', 'plan_preview', 'menu', 'delivery_type', 'order_review', 'confirmation', 'order_history'];
+const FLOW_STEPS = ['hero', 'about_us', 'order_type', 'diet_type_select', 'plan_preview', 'plan_addon', 'plan_review', 'menu', 'delivery_type', 'order_review', 'confirmation', 'order_history'];
 const pathForStep = (step) => (step === 'hero' ? '/' : `/${step}`) + window.location.search;
 
 // orderType/deliveryType/selectedDietTypeId live only in memory, so a refresh mid-flow
@@ -63,6 +69,12 @@ export default function App() {
   const [orderType, setOrderType] = useState(null);   // 'twelve_day' | 'one_time'
   const [deliveryType, setDeliveryType] = useState(null);   // 'hotel' | 'current_location'
   const [selectedDietTypeId, setSelectedDietTypeId] = useState(null);
+
+  // ─── 12-day plan state: selections made in PlanPreview, carried through the
+  // guest-details modal + addon step to the final review/pay screen ─────────────
+  const [planSelections, setPlanSelections] = useState([]); // [{ plan_date, meal_time, menu_item_id }]
+  const [planReviewItems, setPlanReviewItems] = useState([]); // [{ date, meal, name, price_usd }] — display only
+  const [planAddonId, setPlanAddonId] = useState(null);
   const [guestDetailsOpen, setGuestDetailsOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -230,10 +242,20 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // ─── 12-day plan: Confirm → ask guest details (room always, no delivery choice) ─
-  const handleConfirmPlan = () => {
+  // ─── 12-day plan: Confirm (with the guest's chosen day/meal selections) → ask
+  // guest details (room always, no delivery choice) ─────────────────────────────
+  const handleConfirmPlan = (selections, total, reviewItems) => {
+    setPlanSelections(selections);
+    setPlanReviewItems(reviewItems);
     setDeliveryType(null);
     setGuestDetailsOpen(true);
+  };
+
+  // ─── 12-day plan: addon step done (skipped or picked one) → final review ──────
+  const handlePlanAddonContinue = (addonId) => {
+    setPlanAddonId(addonId);
+    goToStep('plan_review');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ─── One-time: cart has items → ask delivery type ─────────────────────────────
@@ -264,6 +286,9 @@ export default function App() {
     setPendingGeo(null);
     setPendingAllergyTags([]);
     setPendingAllergyOther('');
+    setPlanSelections([]);
+    setPlanReviewItems([]);
+    setPlanAddonId(null);
     goToStep('hero');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -307,14 +332,58 @@ export default function App() {
     setGuestDetailsOpen(false);
 
     if (orderType === 'twelve_day') {
-      goToStep('confirmation');
-      showToast(`Welcome, ${guest_name}!`);
+      goToStep('plan_addon');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     // One-time: review the order (with refund notice + terms) before paying.
     goToStep('order_review');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ─── Shared tail for both checkout flows: start the Hipay checkout for an
+  // already-created order and hand the browser off to Hipay's hosted payment
+  // page. Hipay redirects back to '/?order_id=...&payment=...' (handled by the
+  // mount effect above) once the guest finishes there.
+  const payForOrder = async (orderData) => {
+    setActiveOrder(orderData);
+    addOrderToHistory(orderData.id);
+    setHasOrderHistory(true);
+
+    const paymentRes = await fetch('/api/payments/initiate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ order_id: orderData.id, gateway_provider: 'hipay' }),
+    });
+    const paymentData = await paymentRes.json();
+    if (!paymentRes.ok || !paymentData.payment_form_url) {
+      throw new Error(paymentData.error || 'Payment could not be started');
+    }
+    window.location.href = paymentData.payment_form_url;
+  };
+
+  // ─── 12-day plan review: agree to terms → create the plan order, then pay ─────
+  const handlePlanPayNow = async () => {
+    if (!agreeTerms || !session) return;
+    setSubmitting(true);
+    try {
+      const orderRes = await fetch('/api/orders/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ selections: planSelections, addon_menu_item_id: planAddonId }),
+      });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) throw new Error(orderData.error || 'Order failed');
+      await payForOrder(orderData);
+      setAgreeTerms(false);
+    } catch (err) {
+      showToast(err.message || 'Order failed');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // ─── Order review: agree to terms → place the order ──────────────────────────
@@ -361,35 +430,17 @@ export default function App() {
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error || 'Order failed');
-      setActiveOrder(orderData);
-      addOrderToHistory(orderData.id);
-      setHasOrderHistory(true);
-
-      const paymentRes = await fetch('/api/payments/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ order_id: orderData.id, gateway_provider: 'hipay' }),
-      });
-      const paymentData = await paymentRes.json();
-      if (!paymentRes.ok || !paymentData.payment_form_url) {
-        throw new Error(paymentData.error || 'Payment could not be started');
-      }
-
+      await payForOrder(orderData);
       setCart([]);
       setAgreeTerms(false);
-      // Full browser navigation to Hipay's hosted payment page — leaves the
-      // SPA entirely. Hipay redirects the browser back to our backend
-      // (HIPAY_REDIRECT_URI), which re-verifies the payment server-to-server
-      // before sending the guest back to '/?order_id=...&payment=...'
-      // (handled by the mount effect above).
-      window.location.href = paymentData.payment_form_url;
     } catch (err) {
       showToast(err.message || 'Order failed');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const planAddonItem = planAddonId ? menuItems.find(i => i.id === planAddonId) : null;
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + Number(i.price_usd) * i.quantity, 0);
@@ -452,14 +503,43 @@ export default function App() {
         {/* ── 12-DAY PLAN PREVIEW ────────────────────────────────────────────── */}
         {flowStep === 'plan_preview' && (
           <div className="container" style={{ paddingTop: 8, paddingBottom: 60 }}>
-            <MenuSection
-              menuItems={menuItems}
-              cart={cart}
-              orderType={orderType}
+            <PlanPreview
               dietTypeId={selectedDietTypeId}
               tr={tr}
+              language={language}
               onConfirmPlan={handleConfirmPlan}
               onBack={() => goToStep('diet_type_select')}
+            />
+          </div>
+        )}
+
+        {/* ── 12-DAY: RECOMMENDED ADDON (skippable upsell) ────────────────────── */}
+        {flowStep === 'plan_addon' && (
+          <div className="container" style={{ paddingTop: 8, paddingBottom: 60 }}>
+            <PlanAddonStep
+              menuItems={menuItems}
+              tr={tr}
+              onContinue={handlePlanAddonContinue}
+              onBack={() => goToStep('plan_preview')}
+            />
+          </div>
+        )}
+
+        {/* ── 12-DAY: FINAL REVIEW + PAY ───────────────────────────────────────── */}
+        {flowStep === 'plan_review' && (
+          <div className="container">
+            <PlanReviewStep
+              reviewItems={planReviewItems}
+              addonItem={planAddonItem}
+              session={session}
+              language={language}
+              tr={tr}
+              agreeTerms={agreeTerms}
+              onToggleAgree={setAgreeTerms}
+              onOpenTerms={() => setTermsModalOpen(true)}
+              onPay={handlePlanPayNow}
+              isSubmitting={submitting}
+              onBack={() => goToStep('plan_addon')}
             />
           </div>
         )}
@@ -470,7 +550,6 @@ export default function App() {
             <MenuSection
               menuItems={menuItems}
               cart={cart}
-              orderType={orderType}
               tr={tr}
               onAddToCart={handleAddToCart}
               onRemoveFromCart={handleRemoveFromCart}

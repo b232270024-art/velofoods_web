@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pencil, Check, X, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Check, X, Plus, Trash2, AlertTriangle } from 'lucide-react';
 
 function EditableRow({ item, editingId, draftName, onStartEdit, onDraftChange, onSave, onCancel, onDelete, saving }) {
   const isEditing = editingId === item.id;
@@ -59,15 +59,27 @@ export function SettingsPage() {
   const [dietDraft, setDietDraft] = useState('');
   const [newDietName, setNewDietName] = useState('');
 
+  const [cycleStartDate, setCycleStartDate] = useState('');
+  const [cycleEndDate, setCycleEndDate] = useState('');
+  const [cycleDraft, setCycleDraft] = useState('');
+  const [cycleSaving, setCycleSaving] = useState(false);
+  const [cycleSaved, setCycleSaved] = useState(false);
+
   const fetchAll = useCallback(async () => {
     try {
-      const [rRes, dRes] = await Promise.all([
+      const [rRes, dRes, cRes] = await Promise.all([
         fetch('/api/menu/restaurants'),
         fetch('/api/menu/diet-types'),
+        fetch('/api/admin/plan-cycle'),
       ]);
-      const [r, d] = await Promise.all([rRes.json(), dRes.json()]);
+      const [r, d, c] = await Promise.all([rRes.json(), dRes.json(), cRes.json()]);
       if (Array.isArray(r)) setRestaurants(r);
       if (Array.isArray(d)) setDietTypes(d);
+      if (c?.start_date) {
+        setCycleStartDate(c.start_date);
+        setCycleEndDate(c.end_date);
+        setCycleDraft(c.start_date);
+      }
       setError('');
     } catch {
       setError('Мэдээлэл татахад алдаа гарлаа.');
@@ -77,6 +89,33 @@ export function SettingsPage() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // 12 хоногийн идэвхтэй эргэлтийн эхлэх огноог шинэчилнэ (end_date =
+  // start_date + 11 хоног, серверт тооцоологдоно). Зөвхөн ЦААШИДЫН шинэ
+  // захиалгад нөлөөлнө — аль хэдийн үүссэн захиалгын plan_start_date/
+  // plan_end_date царцсан хэвээр байна.
+  const saveCycleStartDate = async (e) => {
+    e.preventDefault();
+    if (!cycleDraft) return;
+    setCycleSaving(true);
+    try {
+      const res = await fetch('/api/admin/plan-cycle', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start_date: cycleDraft }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Хадгалахад алдаа гарлаа.');
+      setCycleStartDate(data.start_date);
+      setCycleEndDate(data.end_date);
+      setCycleSaved(true);
+      setTimeout(() => setCycleSaved(false), 2500);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCycleSaving(false);
+    }
+  };
 
   // --- Ресторан ---
   const addRestaurant = async (e) => {
@@ -222,6 +261,55 @@ export function SettingsPage() {
           {error}
         </div>
       )}
+
+      <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+        <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.9rem', marginBottom: 4 }}>
+          12 хоногийн эргэлт
+        </h3>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 12 }}>
+          Идэвхтэй эргэлтийн эхлэх огноо — дуусах огноо автоматаар +11 хоногоор тооцоологдоно.
+          Зочин захиалга өгөх өдрөөсөө хамааран энэ цонхны дотор л (1 хоногийн өмнө захиалах
+          дүрмээр) хоолоо авах боломжтой болно.
+        </p>
+        <div style={{
+          display: 'flex', gap: 8, alignItems: 'flex-start',
+          background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8,
+          padding: '9px 12px', marginBottom: 14,
+        }}>
+          <AlertTriangle size={15} color="#92400e" style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: '0.76rem', color: '#92400e', fontWeight: 600, lineHeight: 1.5 }}>
+            Анхаар: энэ огноог өөрчлөх нь зөвхөн ЦААШИД шинээр захиалах зочдод нөлөөлнө — өмнө нь
+            төлбөр төлж худалдаж авсан захиалгын хугацаа, үнэ өөрчлөгдөхгүй.
+          </p>
+        </div>
+        {loading ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Ачааллаж байна...</p>
+        ) : (
+          <form onSubmit={saveCycleStartDate} style={{ display: 'flex', alignItems: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>
+                Эхлэх огноо
+              </label>
+              <input
+                type="date"
+                value={cycleDraft}
+                onChange={e => setCycleDraft(e.target.value)}
+                required
+                style={{ padding: '8px 10px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: '0.85rem' }}
+              />
+            </div>
+            <button type="submit" disabled={cycleSaving || cycleDraft === cycleStartDate} className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>
+              {cycleSaving ? 'Хадгалж байна...' : 'Хадгалах'}
+            </button>
+            {cycleStartDate && cycleEndDate && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                Одоогийн эргэлт: <strong style={{ color: 'var(--text-dark)' }}>{cycleStartDate} — {cycleEndDate}</strong> (12 хоног)
+              </span>
+            )}
+            {cycleSaved && <span style={{ fontSize: '0.8rem', color: 'var(--brand-green)', fontWeight: 700 }}>✓ Хадгалагдлаа</span>}
+          </form>
+        )}
+      </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 20 }}>
         <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.9rem', marginBottom: 4 }}>

@@ -5,6 +5,7 @@ export function emptyItemForm(restaurants, dietTypes) {
   return {
     name: '', category: '', diet_type_id: dietTypes?.[0]?.id || '',
     price_usd: '', description: '', prep_time_min: '', is_featured: false,
+    is_addon_recommended: false,
     restaurant_id: restaurants[0]?.id || '', image_url: '',
   };
 }
@@ -41,6 +42,7 @@ export function ItemForm({ initial, restaurants, dietTypes, onCancel, onSave, sa
       description: form.description.trim() || null,
       prep_time_min: form.prep_time_min ? Number(form.prep_time_min) : null,
       is_featured: !!form.is_featured,
+      is_addon_recommended: !!form.is_addon_recommended,
       restaurant_id: form.restaurant_id,
       image_url: form.image_url.trim() || null,
     });
@@ -99,6 +101,11 @@ export function ItemForm({ initial, restaurants, dietTypes, onCancel, onSave, sa
         <input type="checkbox" checked={form.is_featured} onChange={set('is_featured')} /> Онцлох
       </label>
 
+      <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', color: 'var(--text-body)' }}>
+        <input type="checkbox" checked={form.is_addon_recommended} onChange={set('is_addon_recommended')} />
+        Санал болгох (12 хоногийн планы сүүлийн хуудсан дээр нэмэлт зууш/амттан болгон санал болгоно)
+      </label>
+
       <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 700 }}>Зураг:</span>
         <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading} style={{ fontSize: '0.8rem' }} />
@@ -149,7 +156,8 @@ function ItemRow({ item, restaurants, onEdit, onDelete, onToggleAvailable }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-dark)' }}>{item.name}</span>
-          {item.is_featured && <span style={{ fontSize: '0.7rem' }}>⭐</span>}
+          {item.is_featured && <span style={{ fontSize: '0.7rem' }} title="Онцлох">⭐</span>}
+          {item.is_addon_recommended && <span style={{ fontSize: '0.7rem' }} title="Санал болгох нэмэлт зүйл">🍰</span>}
           {mismatched && (
             <span
               title={`${restaurant.name} нь ${restaurant.diet_type_name} ангилалд харьяалагддаг ч энэ хоол ${item.diet_type_name}-д бүртгэгдсэн байна`}
@@ -332,6 +340,7 @@ export function MenuManager() {
             description: editingItem.description || '',
             prep_time_min: editingItem.prep_time_min || '',
             is_featured: editingItem.is_featured || false,
+            is_addon_recommended: editingItem.is_addon_recommended || false,
             restaurant_id: editingItem.restaurant_id,
             image_url: editingItem.image_url || '',
           }}

@@ -68,6 +68,7 @@ export const createMenuItemSchema = z.object({
   allergens: z.array(z.string().trim().max(50)).nullish(),
   prep_time_min: z.number().int().positive().nullish(),
   is_featured: z.boolean().nullish(),
+  is_addon_recommended: z.boolean().nullish(),
   restaurant_id: uuidSchema('restaurant_id зөв UUID байх ёстой'),
   stock_limit: z.number().int().nonnegative('Лимит 0-ээс их байх ёстой').nullish(),
 });
@@ -83,6 +84,7 @@ export const updateMenuItemSchema = z.object({
   allergens: z.array(z.string().trim().max(50)).nullish(),
   prep_time_min: z.number().int().positive().nullish(),
   is_featured: z.boolean().nullish(),
+  is_addon_recommended: z.boolean().nullish(),
   available: z.boolean().nullish(),
   restaurant_id: uuidSchema('restaurant_id зөв UUID байх ёстой').nullish(),
   stock_limit: z.number().int().nonnegative('Лимит 0-ээс их байх ёстой').nullish(),
@@ -126,6 +128,28 @@ export const createPlanItemSchema = z.object({
   day_number: z.number().int().min(1, 'Өдөр 1-12 хооронд байх ёстой').max(12, 'Өдөр 1-12 хооронд байх ёстой'),
   meal_time: z.enum(['morning', 'lunch', 'evening'], { message: 'meal_time нь morning/lunch/evening байх ёстой' }),
   menu_item_id: uuidSchema('menu_item_id зөв UUID байх ёстой'),
+});
+
+const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Огноо YYYY-MM-DD хэлбэртэй байх ёстой');
+
+// POST /api/orders/plan — 12 хоногийн зочны сонголтууд. Үнэ болон сонголт хоёуланг
+// нь серверт (админы twelve_day_plan_items-тэй тулгаж) дахин баталгаажуулна —
+// энд зөвхөн формат шалгана.
+export const createPlanOrderSchema = z.object({
+  selections: z
+    .array(
+      z.object({
+        plan_date: dateStringSchema,
+        meal_time: z.enum(['morning', 'lunch', 'evening'], { message: 'meal_time нь morning/lunch/evening байх ёстой' }),
+        menu_item_id: uuidSchema('menu_item_id зөв UUID байх ёстой'),
+      })
+    )
+    .min(1, 'Дор хаяж нэг сонголт байх ёстой'),
+  addon_menu_item_id: uuidSchema('addon_menu_item_id зөв UUID байх ёстой').nullish(),
+});
+
+export const updatePlanCycleSchema = z.object({
+  start_date: dateStringSchema,
 });
 
 export const adminLoginSchema = z.object({

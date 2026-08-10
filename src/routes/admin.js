@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { pool } from '../db/pool.js';
-import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema } from '../middleware/validation.js';
+import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema } from '../middleware/validation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { loginLimiter } from '../middleware/rateLimiter.js';
@@ -198,15 +198,19 @@ adminRouter.get('/orders', asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT o.id, o.status, o.total_usd, o.created_at,
+            o.plan_start_date, o.plan_end_date, o.plan_day_count,
             s.guest_name, s.room_number, s.hotel_name, s.delivery_address, s.delivery_type,
-            s.allergy_tags, s.allergy_other,
+            s.order_type, s.diet_type_id, s.allergy_tags, s.allergy_other,
             (SELECT json_agg(json_build_object(
                'menu_item_id', oi.menu_item_id,
                'quantity', oi.quantity,
                'name', mi.name,
                'restaurant_name', r.name,
-               'allergens', mi.allergens
-             ))
+               'allergens', mi.allergens,
+               'plan_date', oi.plan_date,
+               'plan_meal_time', oi.plan_meal_time,
+               'is_addon', oi.is_addon
+             ) ORDER BY oi.plan_date NULLS LAST, oi.plan_meal_time)
              FROM order_items oi
              JOIN menu_items mi ON mi.id = oi.menu_item_id
              JOIN restaurants r ON r.id = mi.restaurant_id
@@ -251,49 +255,101 @@ adminRouter.get('/plan', asyncHandler(async (req, res) => {
   if (restaurant_id) { params.push(restaurant_id); filter += ` AND mi.restaurant_id = $${params.length}`; }
 
   const { rows } = await pool.query(
-    `SELECT pi.id, pi.day_number, pi.meal_time, pi.menu_item_id,
+    `SELECT pi.id, pi.day_number, pi.meal_time, pi.menu_item_id, pi.sort_order,
             mi.name, mi.price_usd, mi.image_url, mi.allergens, mi.diet_type_id, r.name AS restaurant_name
      FROM twelve_day_plan_items pi
      JOIN menu_items mi ON mi.id = pi.menu_item_id
      JOIN restaurants r ON r.id = mi.restaurant_id
      WHERE true ${filter}
-     ORDER BY pi.day_number, pi.meal_time`,
+     ORDER BY pi.day_number, pi.meal_time, pi.sort_order`,
     params
   );
   res.json(rows);
 }));
 
-// Тухайн (өдөр, цаг)-т menu item нэмнэ. Аль хэдийн нэмэгдсэн бол дахин
-// давхардуулахгүй (UNIQUE constraint + ON CONFLICT DO NOTHING).
+// Тухайн (өдөр, цаг)-т menu item нэмнэ. Слот бүрд дээд тал нь 3 хоол (1 үндсэн
+// + 2 нөөц, sort_order 0/1/2) — зочин эдгээрийн дундаас сольж болно. Аль
+// хэдийн нэмэгдсэн бол дахин давхардуулахгүй (UNIQUE constraint).
 adminRouter.post('/plan-items', validateBody(createPlanItemSchema), asyncHandler(async (req, res) => {
   const { day_number, meal_time, menu_item_id } = req.body;
 
   const menuItem = await pool.query(
-    'SELECT id FROM menu_items WHERE id = $1 AND is_deleted = false',
+    'SELECT id, restaurant_id FROM menu_items WHERE id = $1 AND is_deleted = false',
     [menu_item_id]
   );
   if (menuItem.rows.length === 0) {
     return res.status(400).json({ error: 'Сонгосон хоол олдсонгүй.' });
   }
+  const { restaurant_id } = menuItem.rows[0];
+
+  const existing = await pool.query(
+    `SELECT count(*)::int AS n FROM twelve_day_plan_items pi
+     JOIN menu_items mi ON mi.id = pi.menu_item_id
+     WHERE pi.day_number = $1 AND pi.meal_time = $2 AND mi.restaurant_id = $3`,
+    [day_number, meal_time, restaurant_id]
+  );
+  const slotCount = existing.rows[0].n;
+  if (slotCount >= 3) {
+    return res.status(400).json({ error: 'Энэ цаг дээр 3-аас дээш хоол зөвшөөрөгдөхгүй (1 үндсэн + 2 нөөц).' });
+  }
 
   const { rows } = await pool.query(
-    `INSERT INTO twelve_day_plan_items (day_number, meal_time, menu_item_id)
-     VALUES ($1, $2, $3)
+    `INSERT INTO twelve_day_plan_items (day_number, meal_time, menu_item_id, sort_order)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (day_number, meal_time, menu_item_id) DO NOTHING
      RETURNING *`,
-    [day_number, meal_time, menu_item_id]
+    [day_number, meal_time, menu_item_id, slotCount]
   );
   res.status(201).json(rows[0] ?? { alreadyExists: true });
 }));
 
-// Slot-с хоол хасна.
+// Slot-с хоол хасна, дараа нь үлдсэн зүйлсийг sort_order-оор дахин 0..n-1
+// болгож дараалуулна — "үндсэн" сонголт (sort_order=0) үргэлж тодорхой байна.
 adminRouter.delete('/plan-items/:id', asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(
-    'DELETE FROM twelve_day_plan_items WHERE id = $1 RETURNING id',
+  const deleted = await pool.query(
+    'DELETE FROM twelve_day_plan_items WHERE id = $1 RETURNING day_number, meal_time, menu_item_id',
     [req.params.id]
   );
-  if (rows.length === 0) return res.status(404).json({ error: 'Олдсонгүй.' });
-  res.json({ deleted: true, id: rows[0].id });
+  if (deleted.rows.length === 0) return res.status(404).json({ error: 'Олдсонгүй.' });
+  const { day_number, meal_time } = deleted.rows[0];
+
+  const menuItem = await pool.query('SELECT restaurant_id FROM menu_items WHERE id = $1', [deleted.rows[0].menu_item_id]);
+  const restaurantId = menuItem.rows[0]?.restaurant_id;
+  if (restaurantId) {
+    const remaining = await pool.query(
+      `SELECT pi.id FROM twelve_day_plan_items pi
+       JOIN menu_items mi ON mi.id = pi.menu_item_id
+       WHERE pi.day_number = $1 AND pi.meal_time = $2 AND mi.restaurant_id = $3
+       ORDER BY pi.sort_order`,
+      [day_number, meal_time, restaurantId]
+    );
+    for (let i = 0; i < remaining.rows.length; i++) {
+      await pool.query('UPDATE twelve_day_plan_items SET sort_order = $1 WHERE id = $2', [i, remaining.rows[i].id]);
+    }
+  }
+
+  res.json({ deleted: true, id: req.params.id });
+}));
+
+// --- 12 хоногийн идэвхтэй эргэлт (Тохиргоо хуудаснаас өөрчилнө) -----------
+adminRouter.get('/plan-cycle', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT to_char(start_date, 'YYYY-MM-DD') AS start_date,
+            to_char(start_date + interval '11 days', 'YYYY-MM-DD') AS end_date
+     FROM twelve_day_cycle_settings WHERE id = true`
+  );
+  if (rows.length === 0) return res.status(404).json({ error: '12 хоногийн эргэлт тохируулагдаагүй байна.' });
+  res.json(rows[0]);
+}));
+
+adminRouter.patch('/plan-cycle', validateBody(updatePlanCycleSchema), asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `UPDATE twelve_day_cycle_settings SET start_date = $1, updated_at = now() WHERE id = true
+     RETURNING to_char(start_date, 'YYYY-MM-DD') AS start_date,
+               to_char(start_date + interval '11 days', 'YYYY-MM-DD') AS end_date`,
+    [req.body.start_date]
+  );
+  res.json(rows[0]);
 }));
 
 // Ажилтан захиалгын статус солих — зөвхөн cancelled/refunded (updateOrderStatusSchema
