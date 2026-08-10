@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Utensils, RefreshCcw, AlertTriangle, Info } from 'lucide-react';
+import { ChevronLeft, Utensils, RefreshCcw, AlertTriangle, Info, Check } from 'lucide-react';
 
 const MEAL_KEYS = ['morning', 'lunch', 'evening'];
 
@@ -7,15 +7,31 @@ function getMealLabel(tr) {
   return { morning: tr.menuMealMorning || 'Morning', lunch: tr.menuMealLunch || 'Lunch', evening: tr.menuMealEvening || 'Evening' };
 }
 
-// 'YYYY-MM-DD' -> "Tue, Aug 18" маягийн уншигдахуйц огноо (хуанлийн огноо тул
-// UTC-ээр parse хийж локал TZ-ийн шилжилтээс зайлсхийнэ).
-function formatPlanDate(dateStr, language) {
+// 'YYYY-MM-DD' -> Date (UTC-ээр parse хийнэ — хуанлийн огноо тул локал TZ-ийн шилжилтээс зайлсхийнэ)
+function parsePlanDate(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+// Өдрийн сонголтын tab-д зориулсан богино "сар / өдөр" хос (жишээ нь "Aug" / "17").
+function formatTabParts(dateStr, language) {
+  const dt = parsePlanDate(dateStr);
+  let month;
   try {
-    return dt.toLocaleDateString(language, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    month = dt.toLocaleDateString(language, { month: 'short', timeZone: 'UTC' });
   } catch {
-    return `${m}/${d}`;
+    month = String(dt.getUTCMonth() + 1);
+  }
+  return { month, day: dt.getUTCDate() };
+}
+
+// Сонгосон өдрийн дээрх дэлгэрэнгүй гарчиг (жишээ нь "Tuesday, August 18").
+function formatFullDate(dateStr, language) {
+  const dt = parsePlanDate(dateStr);
+  try {
+    return dt.toLocaleDateString(language, { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  } catch {
+    return dateStr;
   }
 }
 
@@ -33,6 +49,38 @@ function BackButton({ label, onBack }) {
       <ChevronLeft size={24} strokeWidth={3} />
       {label}
     </button>
+  );
+}
+
+// Дээд талын өдрийн сонголт — нэг мөр segmented control, идэвхтэй өдөр
+// бараан дэвсгэртэй тод харагдана. Олон өдөр орвол хажуу тийш scroll хийнэ.
+function DayTabs({ dates, activeDate, onSelect, language }) {
+  return (
+    <div style={{
+      display: 'flex', border: '1.5px solid var(--border)', borderRadius: 14,
+      overflowX: 'auto', marginBottom: 20, background: 'var(--bg-card)',
+    }}>
+      {dates.map((date, idx) => {
+        const { month, day } = formatTabParts(date, language);
+        const active = date === activeDate;
+        return (
+          <button
+            key={date}
+            onClick={() => onSelect(date)}
+            style={{
+              flex: '0 0 auto', minWidth: 66, padding: '10px 12px', textAlign: 'center',
+              borderRight: idx === dates.length - 1 ? 'none' : '1px solid var(--border)',
+              background: active ? 'var(--text-dark)' : 'transparent',
+              color: active ? '#fff' : 'var(--text-body)',
+              transition: 'background 0.15s',
+            }}
+          >
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, opacity: active ? 0.85 : 0.6 }}>{month}</div>
+            <div style={{ fontSize: '1.05rem', fontWeight: active ? 800 : 700 }}>{day}</div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -110,15 +158,72 @@ function MealSlot({ date, mealKey, label, options, selectedId, onSelect }) {
   );
 }
 
+// Хуудасны доод хэсэгт байнга байрлах "Санал болгох" нэмэлт зүйлийн сонголт —
+// admin-ийн is_addon_recommended гэж тэмдэглэсэн зүйлсээс зочин дан ганц (эсвэл
+// юу ч биш) сонгоно. Дахин дарвал сонголтоо цуцална.
+function AddonSection({ menuItems, tr, addonId, onSelect }) {
+  const options = menuItems.filter(i => i.is_addon_recommended && i.available !== false);
+  if (options.length === 0) return null;
+
+  return (
+    <div className="card" style={{ padding: '18px 22px', marginTop: 16 }}>
+      <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1rem', marginBottom: 4 }}>
+        {tr.menuPlanAddonTitle || 'One more thing?'}
+      </h3>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 16 }}>
+        {tr.menuPlanAddonDesc || 'Our pick for you — add it to tomorrow\'s delivery. Optional, pick at most one.'}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 12 }}>
+        {options.map(item => {
+          const active = addonId === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelect(active ? null : item.id)}
+              style={{
+                textAlign: 'left', padding: 0, overflow: 'hidden', borderRadius: 12,
+                border: active ? '2px solid var(--brand-green)' : '1px solid var(--border-card)',
+                position: 'relative', background: 'var(--bg-card)',
+              }}
+            >
+              {active && (
+                <div style={{
+                  position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: '50%',
+                  background: 'var(--brand-green)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1,
+                }}>
+                  <Check size={13} />
+                </div>
+              )}
+              <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--bg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {item.image_url
+                  ? <img src={item.image_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <Utensils size={26} color="var(--text-muted)" />}
+              </div>
+              <div style={{ padding: 12 }}>
+                <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-dark)', marginBottom: 4 }}>{item.name}</div>
+                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--brand-green)' }}>${Number(item.price_usd).toFixed(2)}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Зочны 12 хоногийн (эсвэл захиалсан огнооноос хамааран цөөн) огнооны цонхыг
-// бодит огноогоор харуулж, слот бүрд (өдөр/цаг) admin-ийн тохируулсан ≤3
-// сонголтын дундаас зочин сольж болно. Session үүсэхээс ӨМНӨ дуудагдана тул
+// бодит огноогоор харуулж, дээд талд өдөр сонгох tab-аар аль өдрийг харахаа
+// сонгоно. Слот бүрд (өдөр/цаг) admin-ийн тохируулсан ≤3 сонголтын дундаас
+// зочин сольж болно. Хуудасны доод хэсэгт байнга байрлах "Санал болгох"
+// нэмэлт зүйлийн хэсэг ч энд орно. Session үүсэхээс ӨМНӨ дуудагдана тул
 // backend /api/menu/plan-window нь public.
-export function PlanPreview({ dietTypeId, tr, language, onConfirmPlan, onBack }) {
+export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan, onBack }) {
   const [data, setData] = useState(null); // { available, start_date, end_date, day_count, days }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selections, setSelections] = useState({}); // { [date]: { [mealKey]: menu_item_id } }
+  const [activeDate, setActiveDate] = useState(null);
+  const [addonId, setAddonId] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -136,6 +241,7 @@ export function PlanPreview({ dietTypeId, tr, language, onConfirmPlan, onBack })
             }
           }
           setSelections(init);
+          setActiveDate(json.days[0]?.date ?? null);
         }
         setError('');
       })
@@ -147,6 +253,8 @@ export function PlanPreview({ dietTypeId, tr, language, onConfirmPlan, onBack })
     setSelections(prev => ({ ...prev, [date]: { ...prev[date], [mealKey]: menuItemId } }));
   };
 
+  const addonItem = addonId ? menuItems.find(i => i.id === addonId) : null;
+
   const total = useMemo(() => {
     if (!data?.days) return 0;
     let sum = 0;
@@ -157,8 +265,9 @@ export function PlanPreview({ dietTypeId, tr, language, onConfirmPlan, onBack })
         if (opt) sum += Number(opt.price_usd);
       }
     }
+    if (addonItem) sum += Number(addonItem.price_usd);
     return sum;
-  }, [data, selections]);
+  }, [data, selections, addonItem]);
 
   const handleConfirm = () => {
     if (!data?.available) return;
@@ -173,10 +282,11 @@ export function PlanPreview({ dietTypeId, tr, language, onConfirmPlan, onBack })
         reviewItems.push({ date: day.date, meal, name: opt.name, price_usd: opt.price_usd });
       }
     }
-    onConfirmPlan(flatSelections, total, reviewItems);
+    onConfirmPlan(flatSelections, total, reviewItems, addonId);
   };
 
   const mealLabels = getMealLabel(tr);
+  const activeDay = data?.days?.find(d => d.date === activeDate);
 
   return (
     <div className="anim-fade-up" style={{ maxWidth: 900, margin: '0 auto', padding: '40px 0 140px' }}>
@@ -210,27 +320,29 @@ export function PlanPreview({ dietTypeId, tr, language, onConfirmPlan, onBack })
         </div>
       )}
 
-      {!loading && data?.available && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {data.days.map(day => (
-            <div key={day.date} className="card" style={{ padding: '18px 22px' }}>
-              <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-dark)' }}>
-                {formatPlanDate(day.date, language)}
-              </div>
-              {MEAL_KEYS.map(meal => (
-                <MealSlot
-                  key={meal}
-                  date={day.date}
-                  mealKey={meal}
-                  label={mealLabels[meal]}
-                  options={day.meals[meal] || []}
-                  selectedId={selections[day.date]?.[meal]}
-                  onSelect={handleSelect}
-                />
-              ))}
+      {!loading && data?.available && activeDay && (
+        <>
+          <DayTabs dates={data.days.map(d => d.date)} activeDate={activeDate} onSelect={setActiveDate} language={language} />
+
+          <div className="card" style={{ padding: '18px 22px' }}>
+            <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1.05rem', color: 'var(--text-dark)' }}>
+              {formatFullDate(activeDay.date, language)}
             </div>
-          ))}
-        </div>
+            {MEAL_KEYS.map(meal => (
+              <MealSlot
+                key={meal}
+                date={activeDay.date}
+                mealKey={meal}
+                label={mealLabels[meal]}
+                options={activeDay.meals[meal] || []}
+                selectedId={selections[activeDay.date]?.[meal]}
+                onSelect={handleSelect}
+              />
+            ))}
+          </div>
+
+          <AddonSection menuItems={menuItems} tr={tr} addonId={addonId} onSelect={setAddonId} />
+        </>
       )}
 
       {!loading && data?.available && (
@@ -243,7 +355,7 @@ export function PlanPreview({ dietTypeId, tr, language, onConfirmPlan, onBack })
           <div style={{ display: 'flex', flexDirection: 'row', maxWidth: 900, width: '100%', margin: '0 auto', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
-                {data.day_count} {tr.menuPlanDaysLabel || 'days'}
+                {data.day_count} {tr.menuPlanDaysLabel || 'days'}{addonItem ? ' + 1' : ''}
               </div>
               <div style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--brand-green)' }}>${total.toFixed(2)}</div>
             </div>

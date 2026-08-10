@@ -14,7 +14,6 @@ import { DeliveryTypeSelection } from './components/DeliveryTypeSelection';
 import { GuestDetailsModal } from './components/GuestDetailsModal';
 import { MenuSection } from './components/MenuSection';
 import { PlanPreview } from './components/PlanPreview';
-import { PlanAddonStep } from './components/PlanAddonStep';
 import { PlanReviewStep } from './components/PlanReviewStep';
 import { CartDrawer } from './components/CartDrawer';
 import { OrderReview } from './components/OrderReview';
@@ -29,16 +28,16 @@ import { addOrderToHistory, getOrderHistory } from './lib/orderHistory';
 // 'hero'            → landing page (Hero + Special Offers + How it works + About)
 // 'order_type'      → Select an order type screen (12-day plan / one-time)
 // 'diet_type_select'→ (12-day) pick which restaurant/diet-type's plan to preview
-// 'plan_preview'    → (12-day) real date-based plan, guest can swap each meal slot
-//                     among admin's ≤3 options → Confirm → guest details modal
-// 'plan_addon'      → (12-day) admin's "recommended extra" upsell (skippable)
+// 'plan_preview'    → (12-day) real date-based plan: day tabs at the top, guest can
+//                     swap each meal slot among admin's ≤3 options, plus an always-
+//                     visible "recommended extra" section → Confirm → guest details
 // 'plan_review'     → (12-day) day-by-day summary + terms + Pay → Hipay checkout
 // 'menu'            → (one-time) full menu, cart, "Continue" once cart has items
 // 'delivery_type'   → (one-time) hotel room vs current location
 // 'confirmation'    → order/plan confirmed (payment collected via Hipay)
 // 'order_history'   → browser-remembered list of this guest's past orders (Header button)
 // ─────────────────────────────────────────────────────────────────────────────
-const FLOW_STEPS = ['hero', 'about_us', 'order_type', 'diet_type_select', 'plan_preview', 'plan_addon', 'plan_review', 'menu', 'delivery_type', 'order_review', 'confirmation', 'order_history'];
+const FLOW_STEPS = ['hero', 'about_us', 'order_type', 'diet_type_select', 'plan_preview', 'plan_review', 'menu', 'delivery_type', 'order_review', 'confirmation', 'order_history'];
 const pathForStep = (step) => (step === 'hero' ? '/' : `/${step}`) + window.location.search;
 
 // orderType/deliveryType/selectedDietTypeId live only in memory, so a refresh mid-flow
@@ -242,20 +241,15 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // ─── 12-day plan: Confirm (with the guest's chosen day/meal selections) → ask
-  // guest details (room always, no delivery choice) ─────────────────────────────
-  const handleConfirmPlan = (selections, total, reviewItems) => {
+  // ─── 12-day plan: Confirm (with the guest's chosen day/meal selections + optional
+  // recommended addon, both picked on the same plan_preview page) → ask guest
+  // details (room always, no delivery choice) ────────────────────────────────────
+  const handleConfirmPlan = (selections, total, reviewItems, addonId) => {
     setPlanSelections(selections);
     setPlanReviewItems(reviewItems);
+    setPlanAddonId(addonId);
     setDeliveryType(null);
     setGuestDetailsOpen(true);
-  };
-
-  // ─── 12-day plan: addon step done (skipped or picked one) → final review ──────
-  const handlePlanAddonContinue = (addonId) => {
-    setPlanAddonId(addonId);
-    goToStep('plan_review');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ─── One-time: cart has items → ask delivery type ─────────────────────────────
@@ -332,7 +326,7 @@ export default function App() {
     setGuestDetailsOpen(false);
 
     if (orderType === 'twelve_day') {
-      goToStep('plan_addon');
+      goToStep('plan_review');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -505,22 +499,11 @@ export default function App() {
           <div className="container" style={{ paddingTop: 8, paddingBottom: 60 }}>
             <PlanPreview
               dietTypeId={selectedDietTypeId}
+              menuItems={menuItems}
               tr={tr}
               language={language}
               onConfirmPlan={handleConfirmPlan}
               onBack={() => goToStep('diet_type_select')}
-            />
-          </div>
-        )}
-
-        {/* ── 12-DAY: RECOMMENDED ADDON (skippable upsell) ────────────────────── */}
-        {flowStep === 'plan_addon' && (
-          <div className="container" style={{ paddingTop: 8, paddingBottom: 60 }}>
-            <PlanAddonStep
-              menuItems={menuItems}
-              tr={tr}
-              onContinue={handlePlanAddonContinue}
-              onBack={() => goToStep('plan_preview')}
             />
           </div>
         )}
@@ -539,7 +522,7 @@ export default function App() {
               onOpenTerms={() => setTermsModalOpen(true)}
               onPay={handlePlanPayNow}
               isSubmitting={submitting}
-              onBack={() => goToStep('plan_addon')}
+              onBack={() => goToStep('plan_preview')}
             />
           </div>
         )}
