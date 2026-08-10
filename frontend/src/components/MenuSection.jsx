@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Plus, Minus, ArrowRight, ChevronLeft, Utensils, Sparkles } from 'lucide-react';
+import { useIsMobile } from '../lib/useIsMobile';
 
 function BackButton({ label, onBack }) {
   return (
@@ -36,11 +37,13 @@ export function dietStyle(name) {
 
 const CARD_BG = ['#fff3e8', '#e8f5e9', '#fff8e1', '#fce4ec', '#e8f0fe', '#f0fdf4'];
 
-function ItemCard({ item, idx, qty, onAddToCart, onRemoveFromCart, readOnly }) {
+function ItemCard({ item, idx, qty, onAddToCart, onRemoveFromCart, readOnly, compact }) {
   const diet = dietStyle(item.diet_type_name);
   const bg = CARD_BG[idx % CARD_BG.length];
   const featured = item.is_featured;
 
+  // Mobile 2-баганат grid дотор нэг дэлгэц дээр ойролцоогоор 4 карт багтаах
+  // зорилгоор compact горимд зураг илүү намхан, тайлбар нуугдана, товч жижиг.
   return (
     <div
       className="card anim-fade-up"
@@ -56,18 +59,18 @@ function ItemCard({ item, idx, qty, onAddToCart, onRemoveFromCart, readOnly }) {
     >
       {featured && (
         <div style={{
-          position: 'absolute', top: 12, right: 12,
+          position: 'absolute', top: compact ? 8 : 12, right: compact ? 8 : 12,
           background: 'var(--accent-yellow)', color: '#111',
-          fontSize: '0.7rem', fontWeight: 800,
-          padding: '3px 10px', borderRadius: 'var(--r-full)',
+          fontSize: compact ? '0.62rem' : '0.7rem', fontWeight: 800,
+          padding: compact ? '2px 7px' : '3px 10px', borderRadius: 'var(--r-full)',
           zIndex: 1, display: 'flex', alignItems: 'center', gap: 4,
         }}>
-          <Sparkles size={12} /> Featured
+          <Sparkles size={compact ? 10 : 12} /> {compact ? '' : 'Featured'}
         </div>
       )}
 
       <div style={{
-        width: '100%', aspectRatio: '16/9',
+        width: '100%', aspectRatio: compact ? '1/1' : '16/9',
         background: bg,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         position: 'relative', overflow: 'hidden',
@@ -82,88 +85,106 @@ function ItemCard({ item, idx, qty, onAddToCart, onRemoveFromCart, readOnly }) {
             }}
           />
         ) : (
-          <Utensils size={40} color="var(--text-muted)" />
+          <Utensils size={compact ? 26 : 40} color="var(--text-muted)" />
         )}
       </div>
 
-      <div style={{ padding: '18px 18px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            padding: '3px 10px', borderRadius: 'var(--r-full)',
-            background: diet.bg, color: diet.color,
-            fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${diet.color}22`,
-          }}>
-            {diet.label}
-          </span>
-          {item.category && (
+      <div style={{ padding: compact ? '10px 10px 10px' : '18px 18px 16px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+        {!compact && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
             <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '3px 10px', borderRadius: 'var(--r-full)',
-              background: 'var(--bg-muted)', color: 'var(--text-muted)',
-              fontSize: '0.72rem', fontWeight: 600,
+              background: diet.bg, color: diet.color,
+              fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${diet.color}22`,
             }}>
-              {item.category}
+              {diet.label}
             </span>
-          )}
-        </div>
+            {item.category && (
+              <span style={{
+                padding: '3px 10px', borderRadius: 'var(--r-full)',
+                background: 'var(--bg-muted)', color: 'var(--text-muted)',
+                fontSize: '0.72rem', fontWeight: 600,
+              }}>
+                {item.category}
+              </span>
+            )}
+          </div>
+        )}
 
-        <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-dark)', marginBottom: 6, lineHeight: 1.35 }}>
+        <h3 style={{
+          fontSize: compact ? '0.85rem' : '1rem', fontWeight: 700, color: 'var(--text-dark)',
+          marginBottom: compact ? 3 : 6, lineHeight: 1.3,
+          ...(compact ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}),
+        }}>
           {item.name}
         </h3>
 
-        {item.description && (
+        {!compact && item.description && (
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: 12 }}>
             {item.description}
           </p>
         )}
 
         {item.stock_limit === 0 && (
-          <div style={{ fontSize: '0.78rem', color: '#dc2626', marginBottom: 14, fontWeight: 700 }}>
+          <div style={{ fontSize: compact ? '0.68rem' : '0.78rem', color: '#dc2626', marginBottom: compact ? 6 : 14, fontWeight: 700 }}>
             Sold Out
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
-          <span style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--brand-green)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', gap: 6 }}>
+          <span style={{ fontSize: compact ? '0.92rem' : '1.2rem', fontWeight: 900, color: 'var(--brand-green)' }}>
             ${Number(item.price_usd).toFixed(2)}
           </span>
 
           {readOnly ? null : item.stock_limit === 0 ? (
             <span style={{
               background: '#f3f4f6', color: '#9ca3af',
-              padding: '9px 20px', borderRadius: 10,
-              fontWeight: 700, fontSize: '0.875rem',
+              padding: compact ? '6px 10px' : '9px 20px', borderRadius: 10,
+              fontWeight: 700, fontSize: compact ? '0.72rem' : '0.875rem',
             }}>
               {tr.menuSoldOut || 'Sold Out'}
             </span>
           ) : qty > 0 ? (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
+              display: 'flex', alignItems: 'center', gap: compact ? 3 : 6,
               background: 'var(--bg-muted)', borderRadius: 10, padding: '4px',
             }}>
               <button
                 onClick={() => onRemoveFromCart(item.id)}
                 style={{
-                  width: 30, height: 30, borderRadius: 7,
+                  width: compact ? 24 : 30, height: compact ? 24 : 30, borderRadius: 7,
                   background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Minus size={14} />
+                <Minus size={compact ? 12 : 14} />
               </button>
-              <span style={{ fontWeight: 800, minWidth: 22, textAlign: 'center', fontSize: '0.9rem' }}>{qty}</span>
+              <span style={{ fontWeight: 800, minWidth: compact ? 16 : 22, textAlign: 'center', fontSize: compact ? '0.8rem' : '0.9rem' }}>{qty}</span>
               <button
                 onClick={() => onAddToCart(item)}
                 disabled={item.stock_limit !== null && qty >= item.stock_limit}
                 style={{
-                  width: 30, height: 30, borderRadius: 7,
+                  width: compact ? 24 : 30, height: compact ? 24 : 30, borderRadius: 7,
                   background: item.stock_limit !== null && qty >= item.stock_limit ? '#ccc' : 'var(--brand-green)', color: 'white',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Plus size={14} />
+                <Plus size={compact ? 12 : 14} />
               </button>
             </div>
+          ) : compact ? (
+            <button
+              onClick={() => onAddToCart(item)}
+              aria-label="Add to cart"
+              style={{
+                width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                background: 'var(--brand-green)', color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Plus size={15} />
+            </button>
           ) : (
             <button
               onClick={() => onAddToCart(item)}
@@ -183,12 +204,12 @@ function ItemCard({ item, idx, qty, onAddToCart, onRemoveFromCart, readOnly }) {
   );
 }
 
-function CardGrid({ items, getQty, onAddToCart, onRemoveFromCart, readOnly }) {
+function CardGrid({ items, getQty, onAddToCart, onRemoveFromCart, readOnly, compact }) {
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-      gap: 24,
+      gridTemplateColumns: compact ? '1fr 1fr' : 'repeat(auto-fill, minmax(260px, 1fr))',
+      gap: compact ? 12 : 24,
     }}>
       {items.map((item, idx) => (
         <ItemCard
@@ -199,6 +220,7 @@ function CardGrid({ items, getQty, onAddToCart, onRemoveFromCart, readOnly }) {
           onAddToCart={onAddToCart}
           onRemoveFromCart={onRemoveFromCart}
           readOnly={readOnly}
+          compact={compact}
         />
       ))}
     </div>
@@ -209,6 +231,7 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
   const [search, setSearch] = useState('');
   const [dietFilter, setDietFilter] = useState('all');
   const [catFilter, setCatFilter] = useState('All');
+  const isMobile = useIsMobile();
 
   const categories = useMemo(() => {
     const cats = [...new Set(menuItems.map(i => i.category).filter(Boolean))];
@@ -344,7 +367,7 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 20 }}>
               {filtered.length} dish{filtered.length !== 1 ? 'es' : ''} found
             </p>
-            <CardGrid items={filtered} getQty={getQty} onAddToCart={onAddToCart} onRemoveFromCart={onRemoveFromCart} />
+            <CardGrid items={filtered} getQty={getQty} onAddToCart={onAddToCart} onRemoveFromCart={onRemoveFromCart} compact={isMobile} />
           </>
         )
       ) : (
@@ -355,7 +378,7 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
               <h3 style={{ fontWeight: 800, fontSize: '1.3rem', color: 'var(--text-dark)', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Sparkles size={20} color="var(--accent-orange)" /> {tr.menuSpecialOffers}
               </h3>
-              <CardGrid items={featuredItems} getQty={getQty} onAddToCart={onAddToCart} onRemoveFromCart={onRemoveFromCart} />
+              <CardGrid items={featuredItems} getQty={getQty} onAddToCart={onAddToCart} onRemoveFromCart={onRemoveFromCart} compact={isMobile} />
             </section>
           )}
 
@@ -368,17 +391,17 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
                 key={cat}
                 style={banded ? {
                   background: 'var(--brand-green)',
-                  borderRadius: 'var(--r-xl)',
-                  padding: '32px 28px',
+                  borderRadius: isMobile ? 'var(--r-lg)' : 'var(--r-xl)',
+                  padding: isMobile ? '16px 14px' : '32px 28px',
                 } : undefined}
               >
                 <h3 style={{
-                  fontWeight: 800, fontSize: '1.3rem', marginBottom: 18,
+                  fontWeight: 800, fontSize: isMobile ? '1.05rem' : '1.3rem', marginBottom: isMobile ? 12 : 18,
                   color: banded ? 'white' : 'var(--text-dark)',
                 }}>
                   {cat}
                 </h3>
-                <CardGrid items={items} getQty={getQty} onAddToCart={onAddToCart} onRemoveFromCart={onRemoveFromCart} />
+                <CardGrid items={items} getQty={getQty} onAddToCart={onAddToCart} onRemoveFromCart={onRemoveFromCart} compact={isMobile} />
               </section>
             );
           })}

@@ -175,13 +175,15 @@ function MealTimeSection({ date, mealKey, label, categories, selections, onSelec
   const Icon = cfg.icon;
 
   return (
-    <div style={{ marginBottom: 6, marginTop: 22 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 999,
-        background: cfg.bg, border: `1.5px solid ${cfg.border}`, width: 'fit-content',
-      }}>
-        <Icon size={17} color={cfg.color} />
-        <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.95rem', color: cfg.color }}>
+    <div style={{ marginBottom: 6, marginTop: 26 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: 9, background: cfg.bg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          <Icon size={16} color={cfg.color} strokeWidth={2.25} />
+        </div>
+        <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1.02rem', color: 'var(--text-dark)', letterSpacing: 0.1 }}>
           {label}
         </span>
       </div>
