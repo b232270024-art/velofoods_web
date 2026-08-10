@@ -15,6 +15,19 @@ if (process.env.DATABASE_URL) {
   realPool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
     connectionTimeoutMillis: 5000,
+    // Query/statement-д цаг хугацааны хязгаар өгөхгүй бол сервер эсвэл сүлжээ
+    // саатах үед Node хариу хүлээгээд зогсчихдог — Railway-ийн edge gateway
+    // ~25с-д 502 буцаадаг ч манай процесс дотроо ХҮЛЭЭСЭЭР байдаг тул client
+    // огт ойлгомжтой алдаа авдаггүй байсан. Эндээс тодорхой алдаа (500) хурдан
+    // буцаахын тулд:
+    statement_timeout: 15000,
+    query_timeout: 20000,
+    // Идэвхгүй connection 10 секундэд хаагддаг (pg-ийн анхны утга) тул удаан
+    // хугацааны зайтай (admin dashboard гэх мэт) хүсэлт бүр шинэ TCP/TLS
+    // холболт нээж, эхний хүсэлт удаан болдог байсан — idle-г уртасгаж,
+    // TCP keep-alive асаана.
+    idleTimeoutMillis: 30000,
+    keepAlive: true,
     ssl: isLocalhost ? false : { rejectUnauthorized: false },
   });
 }
