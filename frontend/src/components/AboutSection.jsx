@@ -3,10 +3,10 @@ import { Utensils, ChefHat, Salad, Coffee } from 'lucide-react';
 
 export function AboutSection({ tr, onAboutClick }) {
   const GRID_ICONS = [
-    { icon: Utensils, bg: '#fff3e8', color: '#c2410c', image: '/images/about-1.png' },
-    { icon: ChefHat, bg: '#e8f5e9', color: '#166534', image: '/images/about-2.png' },
-    { icon: Salad, bg: '#e8f0fe', color: '#1d4ed8', image: '/images/about-3.png' },
-    { icon: Coffee, bg: '#fce4ec', color: '#be185d', image: '/images/about-4.png' },
+    { icon: Utensils, bg: '#fff3e8', color: '#c2410c', image: '/images/about-1.webp' },
+    { icon: ChefHat, bg: '#e8f5e9', color: '#166534', image: '/images/about-2.webp' },
+    { icon: Salad, bg: '#e8f0fe', color: '#1d4ed8', image: '/images/about-3.webp' },
+    { icon: Coffee, bg: '#fce4ec', color: '#be185d', image: '/images/about-4.webp' },
   ];
 
   return (

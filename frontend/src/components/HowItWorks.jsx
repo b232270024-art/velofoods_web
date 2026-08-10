@@ -7,14 +7,14 @@ const STEPS = [
     bg: '#e8f5e9',
     color: '#166534',
     num: 1,
-    image: '/images/step1.png',
+    image: '/images/step1.webp',
   },
   {
     icon: Bike,
     bg: '#fff3e8',
     color: '#c2410c',
     num: 2,
-    image: '/images/step2.png',
+    image: '/images/step2.webp',
   },
   {
     icon: Utensils,

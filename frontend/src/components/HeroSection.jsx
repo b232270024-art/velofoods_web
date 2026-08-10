@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { ArrowDown, Truck, ShoppingBag } from 'lucide-react';
 
 const DISH_IMAGES = [
-  '/images/1.png',
-  '/images/2.png',
-  '/images/3.png',
-  '/images/4.png',
-  '/images/5.png',
+  '/images/1.webp',
+  '/images/2.webp',
+  '/images/3.webp',
+  '/images/4.webp',
+  '/images/5.webp',
 ];
 
 const ROTATE_INTERVAL_MS = 3000;
