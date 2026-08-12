@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, User, AlertTriangle, ChevronDown, ChevronUp, Clock, CalendarRange, CreditCard } from 'lucide-react';
+import { RefreshCw, User, AlertTriangle, ChevronDown, ChevronUp, Clock, CalendarRange, CreditCard, Download } from 'lucide-react';
 import { dietStyle } from '../components/MenuSection';
+import { isWithinDateRange } from '../lib/dateRange';
+import { downloadExcel } from '../lib/excelExport';
 
 const MEAL_LABEL = { morning: 'Өглөө', lunch: 'Өдөр', evening: 'Орой' };
 
@@ -71,6 +73,9 @@ function OrderRow({ order, restaurantByDiet }) {
         onClick={() => setExpanded(p => !p)}
         style={{ cursor: 'pointer', background: expanded ? 'var(--bg-muted)' : undefined, transition: 'background 0.15s' }}
       >
+        <td style={{ padding: '11px 12px', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={order.id}>
+          {order.id.slice(0, 8)}…
+        </td>
         <td style={{ padding: '11px 12px', fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             <Clock size={12} /> {fmtDate(order.created_at)}
@@ -146,7 +151,7 @@ function OrderRow({ order, restaurantByDiet }) {
 
       {expanded && (
         <tr>
-          <td colSpan={8} style={{ padding: '0 12px 16px', background: 'var(--bg-muted)', borderBottom: '1.5px solid var(--border)' }}>
+          <td colSpan={9} style={{ padding: '0 12px 16px', background: 'var(--bg-muted)', borderBottom: '1.5px solid var(--border)' }}>
             {conflicts.length > 0 && (
               <div style={{
                 background: '#fef2f2', border: '1.5px solid #fecaca', color: '#991b1b',
@@ -224,6 +229,8 @@ export function TwelveDayGuests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filterRestaurant, setFilterRestaurant] = useState('all');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
   const [sortDir, setSortDir] = useState('desc');
 
   const fetchAll = useCallback(async () => {
@@ -248,9 +255,12 @@ export function TwelveDayGuests() {
   const restaurantByDiet = Object.fromEntries(restaurants.map(r => [r.diet_type_id, r]));
 
   const filtered = orders.filter(o => {
-    if (filterRestaurant === 'all') return true;
-    const rest = restaurants.find(r => r.id === filterRestaurant);
-    return rest && o.diet_type_id === rest.diet_type_id;
+    if (filterRestaurant !== 'all') {
+      const rest = restaurants.find(r => r.id === filterRestaurant);
+      if (!rest || o.diet_type_id !== rest.diet_type_id) return false;
+    }
+    if ((filterFrom || filterTo) && !isWithinDateRange(o.created_at, filterFrom, filterTo)) return false;
+    return true;
   }).sort((a, b) => {
     const aT = new Date(a.created_at).getTime();
     const bT = new Date(b.created_at).getTime();
@@ -275,6 +285,46 @@ export function TwelveDayGuests() {
 
   const totalConflicts = filtered.filter(hasConflict).length;
   const totalRevenue = filtered.reduce((s, o) => s + Number(o.total_usd || 0), 0);
+
+  // Одоо шүүгдэж буй 12 хоногийн захиалгуудыг Excel файл болгож татна — нэг
+  // sheet захиалга тус бүрээр (summary), нөгөө нь өдөр тус бүрийн хоолоор (дэлгэрэнгүй).
+  const handleExportExcel = () => {
+    const summaryRows = filtered.map(o => {
+      const restaurant = o.diet_type_id ? restaurantByDiet[o.diet_type_id] : null;
+      return {
+        'Захиалгын ID': o.id,
+        'Захиалсан огноо': fmtDate(o.created_at),
+        'Зочин': o.guest_name || '',
+        'Хүргэлт': o.room_number ? `${o.hotel_name || ''} Өрөө ${o.room_number}` : (o.delivery_address || ''),
+        'Ресторан': restaurant?.name || '',
+        'Ангилал': restaurant ? restaurantByDiet[o.diet_type_id]?.diet_type_name || '' : '',
+        'Эхлэх огноо': fmtPlanDate(o.plan_start_date),
+        'Дуусах огноо': fmtPlanDate(o.plan_end_date),
+        'Хоногийн тоо': o.plan_day_count ?? '',
+        'Нийт үнэ ($)': Number(o.total_usd),
+        'Захиалгын статус': ORDER_STATUS_LABEL[o.status] || o.status,
+        'Төлбөр төлөгдсөн огноо': o.paid_at ? fmtDate(o.paid_at) : '',
+        'Харшлын зөрчил': hasConflict(o) ? 'Тийм' : 'Үгүй',
+      };
+    });
+
+    const detailRows = filtered.flatMap(o => (o.items || []).map(item => ({
+      'Захиалгын ID': o.id,
+      'Зочин': o.guest_name || '',
+      'Огноо': fmtPlanDate(item.plan_date),
+      'Цаг': MEAL_LABEL[item.plan_meal_time] || item.plan_meal_time || '',
+      'Хоол': item.name,
+      'Нэгжийн үнэ ($)': Number(item.unit_price_usd ?? 0),
+      'Нэмэлт эсэх': item.is_addon ? 'Тийм' : 'Үгүй',
+      'Захиалгын статус': ORDER_STATUS_LABEL[o.status] || o.status,
+    })));
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadExcel(`twelve_day_orders_${stamp}.xlsx`, [
+      { name: 'Захиалгууд', rows: summaryRows },
+      { name: 'Дэлгэрэнгүй', rows: detailRows },
+    ]);
+  };
 
   return (
     <div>
@@ -372,7 +422,46 @@ export function TwelveDayGuests() {
           >
             Огноо {sortDir === 'desc' ? '↓ Шинэ эхэнд' : '↑ Хуучин эхэнд'}
           </button>
-          <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{filtered.length} захиалга</span>
+
+          <input
+            type="date"
+            value={filterFrom}
+            onChange={e => setFilterFrom(e.target.value)}
+            max={filterTo || undefined}
+            style={{ padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 600, background: 'var(--bg-card)' }}
+          />
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>—</span>
+          <input
+            type="date"
+            value={filterTo}
+            onChange={e => setFilterTo(e.target.value)}
+            min={filterFrom || undefined}
+            style={{ padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 600, background: 'var(--bg-card)' }}
+          />
+          {(filterFrom || filterTo) && (
+            <button
+              onClick={() => { setFilterFrom(''); setFilterTo(''); }}
+              style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textDecoration: 'underline', background: 'transparent' }}
+            >
+              Цэвэрлэх
+            </button>
+          )}
+
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{filtered.length} захиалга</span>
+
+          <button
+            onClick={handleExportExcel}
+            disabled={filtered.length === 0}
+            style={{
+              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 8,
+              background: 'var(--brand-green)', color: '#fff',
+              fontSize: '0.8rem', fontWeight: 700, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: filtered.length === 0 ? 0.5 : 1,
+            }}
+          >
+            <Download size={14} /> Excel татах
+          </button>
         </div>
       )}
 
@@ -391,7 +480,7 @@ export function TwelveDayGuests() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ background: 'var(--bg-muted)', borderBottom: '2px solid var(--border)' }}>
-                {['Захиалсан огноо', 'Зочин / Хүргэлт', 'Ресторан / Ангилал', 'Хугацаа', 'Нийт үнэ', 'Төлбөр', 'Харшил', ''].map((label, i) => (
+                {['ID', 'Захиалсан огноо', 'Зочин / Хүргэлт', 'Ресторан / Ангилал', 'Хугацаа', 'Нийт үнэ', 'Төлбөр', 'Харшил', ''].map((label, i) => (
                   <th key={i} style={{
                     padding: '10px 12px', textAlign: 'left', fontFamily: 'Outfit, sans-serif', fontWeight: 800,
                     fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap',

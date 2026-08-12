@@ -186,6 +186,7 @@ adminRouter.get('/orders', asyncHandler(async (req, res) => {
             (SELECT json_agg(json_build_object(
                'menu_item_id', oi.menu_item_id,
                'quantity', oi.quantity,
+               'unit_price_usd', oi.unit_price_usd,
                'name', mi.name,
                'restaurant_name', r.name,
                'allergens', mi.allergens,

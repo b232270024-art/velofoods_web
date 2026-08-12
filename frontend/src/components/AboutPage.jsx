@@ -22,25 +22,6 @@ export function AboutPage({ tr, onBackToHome }) {
       facebook:
         "https://www.facebook.com/BesbarmakKazakhRestaurant/"
     },
-    {
-      name: "Bosco Verde Italian Restaurant",
-
-      image: "/bosco.jpg",
-
-      description:
-        "Bosco Verde Italian Restaurant offers traditional Italian cuisine prepared with fresh ingredients and authentic recipes. The restaurant provides a comfortable dining environment where guests can enjoy a variety of Italian dishes with quality service and great taste.",
-
-      certificates: [
-        "Food Safety Certificate",
-        "Quality Food Standard",
-        "Fresh Ingredients"
-      ],
-
-      phone: "********",
-
-      facebook:
-        "https://www.facebook.com/p/Bosco-Verde-Italian-vegan-restaurant-100063562871155/"
-    },
   ];
   return (
 

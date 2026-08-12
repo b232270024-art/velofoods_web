@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import io from 'socket.io-client';
-import { RefreshCw, Clock, DoorClosed, Hotel, MapPin, User, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, Clock, User, AlertTriangle, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { isWithinDateRange } from '../lib/dateRange';
+import { downloadExcel } from '../lib/excelExport';
 
 const STATUS_LABEL = {
   pending:   'Хүлээгдэж буй',
@@ -81,6 +83,10 @@ function OrderRow({ order, onChangeStatus, updating, selectedRestaurant }) {
           transition: 'background 0.15s',
         }}
       >
+        {/* Захиалгын ID */}
+        <td style={{ padding: '11px 12px', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={order.id}>
+          {order.id.slice(0, 8)}…
+        </td>
         {/* Огноо */}
         <td style={{ padding: '11px 12px', fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           {fmtDate(order.created_at)}
@@ -140,7 +146,7 @@ function OrderRow({ order, onChangeStatus, updating, selectedRestaurant }) {
       {/* Дэлгэрэнгүй мөр */}
       {expanded && (
         <tr>
-          <td colSpan={8} style={{ padding: '0 12px 14px', background: 'var(--bg-muted)', borderBottom: '1.5px solid var(--border)' }}>
+          <td colSpan={9} style={{ padding: '0 12px 14px', background: 'var(--bg-muted)', borderBottom: '1.5px solid var(--border)' }}>
             {/* Харшилтай анхааруулга */}
             {conflicts.length > 0 && (
               <div style={{
@@ -209,6 +215,8 @@ export function OrdersBoard() {
   const [updatingId, setUpdatingId] = useState(null);
   const [filterRestaurant, setFilterRestaurant] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
   const [sortCol, setSortCol] = useState('created_at');
   const [sortDir, setSortDir] = useState('desc');
   const socketRef = useRef(null);
@@ -270,6 +278,7 @@ export function OrdersBoard() {
       const items = o.items || [];
       if (!items.some(i => i.restaurant_name === filterRestaurant)) return false;
     }
+    if ((filterFrom || filterTo) && !isWithinDateRange(o.created_at, filterFrom, filterTo)) return false;
     return true;
   }).sort((a, b) => {
     let aVal = a[sortCol] ?? '';
@@ -296,6 +305,40 @@ export function OrdersBoard() {
   const SortIcon = ({ col }) => {
     if (sortCol !== col) return <span style={{ opacity: 0.3, marginLeft: 3 }}>↕</span>;
     return <span style={{ marginLeft: 3 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+  };
+
+  // Одоо шүүгдэж буй захиалгуудыг Excel файл болгож татна — нэг sheet
+  // захиалга тус бүрээр (summary), нөгөө нь захиалсан хоол тус бүрээр (дэлгэрэнгүй).
+  const handleExportExcel = () => {
+    const summaryRows = filtered.map(o => ({
+      'Захиалгын ID': o.id,
+      'Огноо': fmtDate(o.created_at),
+      'Зочин': o.guest_name || '',
+      'Хүргэлт': o.room_number ? `${o.hotel_name || ''} Өрөө ${o.room_number}` : (o.delivery_address || ''),
+      'Ресторан': [...new Set((o.items || []).map(i => i.restaurant_name).filter(Boolean))].join(', '),
+      'Нийт үнэ ($)': Number(o.total_usd),
+      'Захиалгын статус': STATUS_LABEL[o.status] || o.status,
+      'Төлбөр': o.payment_status === 'paid' ? 'Төлөгдсөн' : 'Төлөөгүй',
+      'Төлбөр төлөгдсөн огноо': fmtDate(o.paid_at),
+    }));
+
+    const detailRows = filtered.flatMap(o => (o.items || []).map(item => ({
+      'Захиалгын ID': o.id,
+      'Огноо': fmtDate(o.created_at),
+      'Зочин': o.guest_name || '',
+      'Хоол': item.name,
+      'Тоо ширхэг': item.quantity,
+      'Нэгжийн үнэ ($)': Number(item.unit_price_usd ?? 0),
+      'Нийлбэр ($)': Number(item.unit_price_usd ?? 0) * item.quantity,
+      'Ресторан': item.restaurant_name || '',
+      'Захиалгын статус': STATUS_LABEL[o.status] || o.status,
+    })));
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadExcel(`orders_${stamp}.xlsx`, [
+      { name: 'Захиалгууд', rows: summaryRows },
+      { name: 'Дэлгэрэнгүй', rows: detailRows },
+    ]);
   };
 
   return (
@@ -374,9 +417,57 @@ export function OrdersBoard() {
           </select>
         </div>
 
-        <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+        {/* Огнооны хязгаар filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Огноо:</label>
+          <input
+            type="date"
+            value={filterFrom}
+            onChange={e => setFilterFrom(e.target.value)}
+            max={filterTo || undefined}
+            style={{
+              padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)',
+              fontSize: '0.78rem', fontWeight: 600, background: 'var(--bg-card)',
+            }}
+          />
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>—</span>
+          <input
+            type="date"
+            value={filterTo}
+            onChange={e => setFilterTo(e.target.value)}
+            min={filterFrom || undefined}
+            style={{
+              padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)',
+              fontSize: '0.78rem', fontWeight: 600, background: 'var(--bg-card)',
+            }}
+          />
+          {(filterFrom || filterTo) && (
+            <button
+              onClick={() => { setFilterFrom(''); setFilterTo(''); }}
+              style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textDecoration: 'underline', background: 'transparent' }}
+            >
+              Цэвэрлэх
+            </button>
+          )}
+        </div>
+
+        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           {filtered.length} захиалга
         </span>
+
+        <button
+          onClick={handleExportExcel}
+          disabled={filtered.length === 0}
+          style={{
+            marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 14px', borderRadius: 8,
+            background: 'var(--brand-green)', color: '#fff',
+            fontSize: '0.8rem', fontWeight: 700, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: filtered.length === 0 ? 0.5 : 1,
+          }}
+        >
+          <Download size={14} /> Excel татах
+        </button>
       </div>
 
       {error && (
@@ -401,6 +492,7 @@ export function OrdersBoard() {
             <thead>
               <tr style={{ background: 'var(--bg-muted)', borderBottom: '2px solid var(--border)' }}>
                 {[
+                  { label: 'ID', col: 'id' },
                   { label: 'Огноо', col: 'created_at' },
                   { label: 'Зочин / Хүргэлт', col: 'guest_name' },
                   { label: 'Ресторан', col: null },

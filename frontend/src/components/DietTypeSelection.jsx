@@ -123,7 +123,7 @@ export function DietTypeSelection({ tr, onBack, onContinue }) {
                   }}>
                     {cfg.label || r.diet_type_name}
                   </div>
-                  {/* Restaurant Name (Besmabark, Bosco Verde, etc.) - Plain text, NO box */}
+                  {/* Restaurant Name - Plain text, NO box */}
                   <div style={{
                     fontSize: '0.88rem',
                     color: '#6b7280',

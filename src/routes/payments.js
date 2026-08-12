@@ -133,8 +133,18 @@ paymentsRouter.get('/webhook/hipay', asyncHandler(async (req, res) => {
 // UX-д зориулсан сувг — эцсийн эх сурвалж биш тул энд ч бас
 // settleHipayCheckout-оор дахин баталгаажуулна (webhook-той давхацсан ч
 // UPDATE идемпотент тул асуудалгүй).
-paymentsRouter.post('/hipay/redirect', asyncHandler(async (req, res) => {
-  const { checkoutId } = req.body;
+//
+// developers.hipay.mn-ийн sequence diagram-аар баталгаажуулснаар Hipay
+// хэрэглэгчийн browser-ийг бидний бүртгүүлсэн redirect_uri рүү шууд биш,
+// харин "{return_uri}/{checkoutId}/{paymentId}" гэж URL-ийн ЗАМ (path)-д
+// checkoutId/paymentId-г залгаж нэмээд буцаадаг (query string ч биш, JSON
+// body ч биш). Өмнө нь зөвхөн req.query/req.body-оос checkoutId хайдаг
+// байсан тул энэ path segment-ийг огт олохгүй, "payment=error" болж
+// байсан нь "амжилттай гүйлгээ хаалтын алхам руу ороогүй" гэдэг багийн үнэн
+// шалтгаан байв. Одоо path param-ыг эхэнд нь шалгаж, хуучин query/body
+// хэлбэрийг ч зэрэгцүүлэн дэмжинэ (аль ч хувилбараар ирсэн ч ажиллана).
+async function handleHipayRedirect(req, res) {
+  const checkoutId = req.params.checkoutId || req.query.checkoutId || req.body?.checkoutId;
   const frontendBase = process.env.FRONTEND_URL || '';
 
   if (!checkoutId) return res.redirect(`${frontendBase}/?payment=error`);
@@ -150,13 +160,27 @@ paymentsRouter.post('/hipay/redirect', asyncHandler(async (req, res) => {
   }
 
   res.redirect(`${frontendBase}/?order_id=${orderId ?? ''}&payment=${hipayStatus.status}`);
-}));
+}
 
-// Gateway-аас ирэх webhook. transaction_id-д UNIQUE constraint байгаа тул
-// давхардсан webhook ирэхэд ON CONFLICT-оор алгасна (idempotency).
-// payments.status болон orders.status хоёр хүснэгт зэрэг өөрчлөгддөг тул
-// transaction дотор хийж, аль нэг нь бүтэлгүйтвэл хоёулаа rollback болно.
+paymentsRouter.get('/hipay/redirect/:checkoutId/:paymentId', asyncHandler(handleHipayRedirect));
+paymentsRouter.post('/hipay/redirect/:checkoutId/:paymentId', asyncHandler(handleHipayRedirect));
+paymentsRouter.get('/hipay/redirect', asyncHandler(handleHipayRedirect));
+paymentsRouter.post('/hipay/redirect', asyncHandler(handleHipayRedirect));
+
+// Гараагүй gateway-уудад (2c2p/airwallex/bank/qpay) зориулсан placeholder
+// webhook — эдгээрийг бодитоор холбосон код одоогоор байхгүй тул энэ route
+// хараахан хэрэглэгддэггүй. hipay-г ЭНД зайлсхийж байгаа шалтгаан: hipay-ийн
+// webhook/redirect хоёулаа signature-гүй тул payment=paid статусыг зөвхөн
+// Hipay-аас өөрөөс нь server-to-server дахин баталгаажуулсны дараа
+// (settleHipayCheckout) л зөвшөөрдөг. Хэрэв provider='hipay'-г энд ч бас
+// зөвшөөрвөл хэн ч энэ route руу шууд {transaction_id, status:'paid'}
+// хуурамч хүсэлт илгээгээд баталгаажуулалтгүйгээр захиалгыг "paid" болгож
+// чадах нээлттэй цоорхой болно.
 paymentsRouter.post('/webhook/:provider', async (req, res) => {
+  if (req.params.provider === 'hipay') {
+    return res.status(404).json({ error: 'hipay зөвхөн /webhook/hipay (GET) болон /hipay/redirect-ээр баталгаажина.' });
+  }
+
   const { transaction_id, status, amount_charged_local, fx_rate_applied } = req.body;
 
   const client = await pool.connect();

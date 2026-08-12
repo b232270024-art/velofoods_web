@@ -62,6 +62,11 @@ app.use(compression());
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
+// Hipay зэрэг зарим gateway хэрэглэгчийн browser-ийг redirect_uri рүү HTML
+// form-аар (application/x-www-form-urlencoded) POST хийж буцаадаг тул
+// express.json() дангаараа хангалтгүй — үгүй бол req.body хоосон үлдэж,
+// /api/payments/hipay/redirect дээр checkoutId олдохгүй алдаанд орно.
+app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(generalLimiter);
 
