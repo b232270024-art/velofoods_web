@@ -7,6 +7,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Cop17 food web" />
   <title>Velofoods</title>
+  <!-- Нүүр хуудасны hero хэсэгт шууд харагдах зургуудыг эхэрт preload хийнэ —
+       эс бөгөөс эдгээр зураг зөвхөн React JS bundle бүрэн ачаалагдаж,
+       ажиллаж, render хийсний ДАРАА л татагдаж эхэлдэг байсан тул анх
+       нээх үед хоосон харагдах хугацаа урт байв. -->
+  <link rel="preload" as="image" href="/images/hero-bg.webp" />
+  <link rel="preload" as="image" href="/images/1.webp" />
+  <link rel="preload" as="image" href="/images/2.webp" />
   <script>
     // Set the theme before first paint so there's no flash of the wrong
     // theme while React loads. Same resolution logic as lib/useTheme.js.

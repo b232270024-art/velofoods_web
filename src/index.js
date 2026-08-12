@@ -1,5 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
@@ -42,6 +43,11 @@ app.set('trust proxy', 1);
 // цоожлохгүйгээр зөв тохируулах нь тусдаа нухацтай ажил тул яаравчлан
 // буруу тохируулж сайтыг эвдэхээс зайлсхийв.
 app.use(helmet({ contentSecurityPolicy: false }));
+// JS/CSS/HTML хариултыг gzip/brotli-аар шахна — зурагнууд аль хэдийн webp
+// хэлбэрээр шахагдсан тул compression-д дахин хамрагдахгүй (аль хэдийн
+// шахсан өгөгдлийг дахин шахах нь ашиггүй тул filter нь зурагны
+// content-type-г автоматаар алгасдаг).
+app.use(compression());
 
 // cors тохиргоо — cookie ашиглаж байгаа тул credentials зөвшөөрөх шаардлагатай.
 // Frontend болон API нэг Express app-аас (нэг origin-оос) serve хийгддэг тул
@@ -60,6 +66,32 @@ app.use(generalLimiter);
 const frontendDistPath = path.join(__dirname, '../frontend/dist');
 const publicPath = path.join(__dirname, '../public');
 
+// Static хариултад Cache-Control нэмнэ — өмнө нь ямар ч Cache-Control
+// header ирдэггүй байсан тул browser хуудас нээх бүрд бүх зураг/JS/CSS-г
+// (аль хэдийн disk cache-д байгаа хэдий ч) серверээс дахин баталгаажуулж
+// (conditional GET, 304) байсан нь давтан зочлоход зурагнууд удаан
+// "ачаалагдаж байгаа мэт" харагдах гол шалтгаан байв.
+//   - /assets/*  : Vite-ийн build хийсэн файлууд, нэрэндээ content-hash
+//     агуулдаг (жишээ: index-bb884b87.js) тул агуулга өөрчлөгдвөл файлын
+//     нэр өөрчлөгддөг — эсрэгээрээ мөнхөд cache хийж болно (immutable).
+//   - /uploads/* : admin-аас upload хийсэн зураг бүр өвөрмөц (timestamp +
+//     random) нэртэй, ач ирээдүйд дахин бичигдэхгүй тул мөн мөнхөд
+//     cache хийж болно.
+//   - бусад (жишээ нь /images/*.webp) : нэр нь тогтмол (агуулга солигдвол
+//     нэр солигдохгүй байж болзошгүй) тул дунд зэргийн (7 хоног) хугацаагаар
+//     л cache хийж, шинэчлэлт хэт удаан "хоцрохоос" сэргийлнэ.
+//   - .html файлууд : hашлагдсан assets-рүү заадаг тул шинэ deploy бүрд
+//     шууд шинэчлэгдэх ёстой — cache хийхгүй.
+function setStaticCacheHeaders(res, filePath) {
+  if (filePath.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-cache');
+  } else if (filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes(`${path.sep}uploads${path.sep}`)) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else {
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+  }
+}
+
 // байх ёстой — өмнө нь frontend/dist байгаа үед (production дээр үргэлж тийм)
 // public/-г огт serve хийдэггүй байсан тул /uploads/* хэзээ ч ажилладаггүй баг
 // байсан (express.static тохирохгүй үед next()-рүү дамждаг тул SPA catch-all
@@ -68,9 +100,9 @@ const publicPath = path.join(__dirname, '../public');
 // хуучин (React-аас өмнөх) хувилбар тул дараа нь байрлуулбал нүүр хуудсыг
 // халхлана.
 if (fs.existsSync(frontendDistPath)) {
-  app.use(express.static(frontendDistPath));
+  app.use(express.static(frontendDistPath, { setHeaders: setStaticCacheHeaders }));
 }
-app.use(express.static(publicPath));
+app.use(express.static(publicPath, { setHeaders: setStaticCacheHeaders }));
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: allowedOrigins, credentials: true } });
