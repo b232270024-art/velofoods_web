@@ -3,6 +3,7 @@ import io from 'socket.io-client';
 import { RefreshCw, Clock, User, AlertTriangle, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { isWithinDateRange } from '../lib/dateRange';
 import { downloadExcel } from '../lib/excelExport';
+import { formatOrderNumber } from '../lib/orderNumber';
 
 const STATUS_LABEL = {
   pending:   'Хүлээгдэж буй',
@@ -84,8 +85,8 @@ function OrderRow({ order, onChangeStatus, updating, selectedRestaurant }) {
         }}
       >
         {/* Захиалгын ID */}
-        <td style={{ padding: '11px 12px', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={order.id}>
-          {order.id.slice(0, 8)}…
+        <td style={{ padding: '11px 12px', fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          {formatOrderNumber(order.order_number)}
         </td>
         {/* Огноо */}
         <td style={{ padding: '11px 12px', fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
@@ -311,7 +312,7 @@ export function OrdersBoard() {
   // захиалга тус бүрээр (summary), нөгөө нь захиалсан хоол тус бүрээр (дэлгэрэнгүй).
   const handleExportExcel = () => {
     const summaryRows = filtered.map(o => ({
-      'Захиалгын ID': o.id,
+      'Захиалгын ID': formatOrderNumber(o.order_number),
       'Огноо': fmtDate(o.created_at),
       'Зочин': o.guest_name || '',
       'Хүргэлт': o.room_number ? `${o.hotel_name || ''} Өрөө ${o.room_number}` : (o.delivery_address || ''),
@@ -323,7 +324,7 @@ export function OrdersBoard() {
     }));
 
     const detailRows = filtered.flatMap(o => (o.items || []).map(item => ({
-      'Захиалгын ID': o.id,
+      'Захиалгын ID': formatOrderNumber(o.order_number),
       'Огноо': fmtDate(o.created_at),
       'Зочин': o.guest_name || '',
       'Хоол': item.name,
@@ -492,7 +493,7 @@ export function OrdersBoard() {
             <thead>
               <tr style={{ background: 'var(--bg-muted)', borderBottom: '2px solid var(--border)' }}>
                 {[
-                  { label: 'ID', col: 'id' },
+                  { label: 'ID', col: 'order_number' },
                   { label: 'Огноо', col: 'created_at' },
                   { label: 'Зочин / Хүргэлт', col: 'guest_name' },
                   { label: 'Ресторан', col: null },

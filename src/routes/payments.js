@@ -22,7 +22,7 @@ paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandl
 
   if (gateway_provider === 'hipay') {
     const logger = req.app.get('logger');
-    const { amount, currency, fxRate } = convertUsdForHipay(order.rows[0].total_usd);
+    const { amount, currency, fxRate } = await convertUsdForHipay(order.rows[0].total_usd);
 
     logger.info('Hipay checkout эхлүүлж байна', { order_id, amount, currency });
 

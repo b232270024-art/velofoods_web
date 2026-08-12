@@ -106,6 +106,10 @@ CREATE TABLE orders (
   status           order_status NOT NULL DEFAULT 'pending',
   total_usd        numeric(10,2) NOT NULL DEFAULT 0,
   created_at       timestamptz NOT NULL DEFAULT now(),
+  -- Зочид/admin-д харуулах, чат нээхэд ашиглах богино (8 тэмдэгт) захиалгын
+  -- дугаар (src/services/orderNumber.js) — id (UUID) нь бүх FK/дотоод
+  -- логикт хэвээрээ үлдэнэ, энэ багана зөвхөн хүмүүст зориулсан.
+  order_number     text NOT NULL UNIQUE,
   -- Зөвхөн 12 хоногийн план захиалгад бөглөгдөнө (one_time дээр NULL) — тухайн
   -- худалдан авалтын үед тооцоологдсон огнооны цонхыг царцаана, эргэлтийн
   -- start_date дараа өөрчлөгдсөн ч хуучин захиалга өөрчлөгдөхгүй.

@@ -179,7 +179,7 @@ adminRouter.get('/orders', asyncHandler(async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT o.id, o.status, o.total_usd, o.created_at,
+    `SELECT o.id, o.order_number, o.status, o.total_usd, o.created_at,
             o.plan_start_date, o.plan_end_date, o.plan_day_count,
             s.guest_name, s.room_number, s.hotel_name, s.delivery_address, s.delivery_type,
             s.order_type, s.diet_type_id, s.allergy_tags, s.allergy_other,
@@ -368,7 +368,7 @@ adminRouter.patch('/orders/:id/status', validateBody(updateOrderStatusSchema), a
 adminRouter.get('/chat/threads', asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT cm.order_id,
-            o.status AS order_status, o.total_usd,
+            o.order_number, o.status AS order_status, o.total_usd,
             s.guest_name,
             last_msg.message AS last_message,
             last_msg.sender AS last_sender,
@@ -395,7 +395,7 @@ adminRouter.get('/chat/threads', asyncHandler(async (req, res) => {
 // (read_by_admin=true) тэмдэглэнэ.
 adminRouter.get('/chat/:orderId/messages', asyncHandler(async (req, res) => {
   const order = await pool.query(
-    `SELECT o.id, o.status, o.total_usd, o.created_at, s.guest_name, s.room_number, s.hotel_name
+    `SELECT o.id, o.order_number, o.status, o.total_usd, o.created_at, s.guest_name, s.room_number, s.hotel_name
      FROM orders o JOIN sessions s ON s.id = o.session_id WHERE o.id = $1`,
     [req.params.orderId]
   );

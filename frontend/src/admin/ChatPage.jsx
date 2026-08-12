@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import io from 'socket.io-client';
 import { Send, MessageCircle } from 'lucide-react';
+import { formatOrderNumber } from '../lib/orderNumber';
 
 const STATUS_LABEL = {
   pending:   'Хүлээгдэж буй',
@@ -145,7 +146,12 @@ export function ChatPage() {
                   </span>
                 )}
               </div>
-              <div style={{ marginBottom: 6 }}><StatusBadge status={t.order_status} /></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <StatusBadge status={t.order_status} />
+                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {formatOrderNumber(t.order_number)}
+                </span>
+              </div>
               <p style={{
                 fontSize: '0.78rem', color: 'var(--text-muted)',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -173,7 +179,7 @@ export function ChatPage() {
                 {orderDetail && <StatusBadge status={orderDetail.status} />}
               </div>
               <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                {selectedOrderId}
+                {formatOrderNumber(orderDetail?.order_number)}
               </p>
               {orderDetail && (
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>

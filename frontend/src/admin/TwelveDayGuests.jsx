@@ -3,6 +3,7 @@ import { RefreshCw, User, AlertTriangle, ChevronDown, ChevronUp, Clock, Calendar
 import { dietStyle } from '../components/MenuSection';
 import { isWithinDateRange } from '../lib/dateRange';
 import { downloadExcel } from '../lib/excelExport';
+import { formatOrderNumber } from '../lib/orderNumber';
 
 const MEAL_LABEL = { morning: 'Өглөө', lunch: 'Өдөр', evening: 'Орой' };
 
@@ -76,8 +77,8 @@ function OrderRow({ order, restaurantByDiet }) {
         onClick={() => setExpanded(p => !p)}
         style={{ cursor: 'pointer', background: expanded ? 'var(--bg-muted)' : undefined, transition: 'background 0.15s' }}
       >
-        <td style={{ padding: '11px 12px', fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={order.id}>
-          {order.id.slice(0, 8)}…
+        <td style={{ padding: '11px 12px', fontFamily: 'monospace', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          {formatOrderNumber(order.order_number)}
         </td>
         <td style={{ padding: '11px 12px', fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -295,7 +296,7 @@ export function TwelveDayGuests() {
     const summaryRows = filtered.map(o => {
       const restaurant = o.diet_type_id ? restaurantByDiet[o.diet_type_id] : null;
       return {
-        'Захиалгын ID': o.id,
+        'Захиалгын ID': formatOrderNumber(o.order_number),
         'Захиалсан огноо': fmtDate(o.created_at),
         'Зочин': o.guest_name || '',
         'Хүргэлт': o.room_number ? `${o.hotel_name || ''} Өрөө ${o.room_number}` : (o.delivery_address || ''),

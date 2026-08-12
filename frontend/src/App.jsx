@@ -24,6 +24,7 @@ import { OrderHistoryPage } from './components/OrderHistoryPage';
 
 import { LANGUAGES, useTranslation } from './i18n/translations';
 import { addOrderToHistory, getOrderHistory } from './lib/orderHistory';
+import { formatOrderNumber } from './lib/orderNumber';
 
 // ── Flow steps ────────────────────────────────────────────────────────────────
 // 'hero'            → landing page (Hero + Special Offers + How it works + About)
@@ -619,8 +620,8 @@ export default function App() {
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                     {tr.orderIdLabel}
                   </p>
-                  <p style={{ fontFamily: 'monospace', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-dark)', marginTop: 4, marginBottom: 16, wordBreak: 'break-all' }}>
-                    {activeOrder.id}
+                  <p style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-dark)', marginTop: 4, marginBottom: 16, letterSpacing: '0.04em' }}>
+                    {formatOrderNumber(activeOrder.order_number)}
                   </p>
 
                   <p style={{ fontWeight: 700 }}>{tr.orderStatus}: <strong style={{ textTransform: 'uppercase' }}>{activeOrder.status}</strong></p>

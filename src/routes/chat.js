@@ -1,28 +1,31 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
-import { validateBody, chatMessageSchema, uuidPattern } from '../middleware/validation.js';
+import { validateBody, chatMessageSchema, orderNumberPattern } from '../middleware/validation.js';
 
 export const chatRouter = Router();
 
-// Зочин ↔ админ чат — нэвтрэлт шаардахгүй, захиалгын ID нь өөрөө "нэвтрэх
-// түлхүүр" болдог (Hipay redirect-ийн ?order_id= адилхан итгэлцлийн загвар).
-// Тиймээс энэ router-т requireSession/requireAdmin ашиглахгүй — доорх бүх
-// endpoint зөвхөн order_id УУИД зөв бөгөөд тухайн захиалга бодитоор байгаа
-// эсэхийг шалгана.
+// Зочин ↔ админ чат — нэвтрэлт шаардахгүй, богино захиалгын дугаар (order_number)
+// нь өөрөө "нэвтрэх түлхүүр" болдог (Hipay redirect-ийн ?order_id= адилхан
+// итгэлцлийн загвар — гэхдээ энд UUID биш, зочинд харуулсан богино кодоор
+// хайна). Тиймээс энэ router-т requireSession/requireAdmin ашиглахгүй — доорх
+// бүх endpoint зөвхөн код зөв форматтай бөгөөд тухайн захиалга бодитоор
+// байгаа эсэхийг шалгана. Дотоод холбоос (chat_messages.order_id, socket
+// room) хэвээрээ UUID (order.id) дээр тулгуурлана.
 
-async function findOrder(orderId) {
-  if (!uuidPattern.test(orderId)) return null;
+async function findOrder(codeInput) {
+  const code = (codeInput || '').trim().toUpperCase();
+  if (!orderNumberPattern.test(code)) return null;
   const { rows } = await pool.query(
-    'SELECT id, status, total_usd, created_at FROM orders WHERE id = $1',
-    [orderId]
+    'SELECT id, order_number, status, total_usd, created_at FROM orders WHERE order_number = $1',
+    [code]
   );
   return rows[0] || null;
 }
 
-// Мөн widget-ийн "order id баталгаажуулах" алхамд ашиглагдана — 404 бол
-// тухайн ID-тай захиалга байхгүй гэсэн үг.
-chatRouter.get('/:orderId/messages', async (req, res) => {
-  const order = await findOrder(req.params.orderId);
+// Мөн widget-ийн "захиалгын дугаар баталгаажуулах" алхамд ашиглагдана — 404
+// бол тухайн дугаартай захиалга байхгүй гэсэн үг.
+chatRouter.get('/:orderNumber/messages', async (req, res) => {
+  const order = await findOrder(req.params.orderNumber);
   if (!order) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
 
   const messages = await pool.query(
@@ -32,8 +35,8 @@ chatRouter.get('/:orderId/messages', async (req, res) => {
   res.json({ order, messages: messages.rows });
 });
 
-chatRouter.post('/:orderId/messages', validateBody(chatMessageSchema), async (req, res) => {
-  const order = await findOrder(req.params.orderId);
+chatRouter.post('/:orderNumber/messages', validateBody(chatMessageSchema), async (req, res) => {
+  const order = await findOrder(req.params.orderNumber);
   if (!order) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
 
   const { message } = req.body;

@@ -3,8 +3,29 @@ import { pool } from '../db/pool.js';
 import { requireSession } from '../middleware/auth.js';
 import { validateBody, createOrderSchema, createPlanOrderSchema } from '../middleware/validation.js';
 import { resolvePlanWindow, dateToDayNumber, enumerateDates } from '../services/twelveDayPlan.js';
+import { generateOrderNumber } from '../services/orderNumber.js';
 
 export const ordersRouter = Router();
+
+// order_number давхцах магадлал бараг байхгүй ч (852 тэрбум хослол) DB-ийн
+// UNIQUE constraint дээр найдаж, зөрчил гарвал SAVEPOINT-руу буцаад шинэ
+// кодоор дахин оролдоно. insertFn(orderNumber) нь тухайн INSERT query-г
+// гүйцэтгэнэ.
+async function insertOrder(client, insertFn) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const orderNumber = generateOrderNumber();
+    await client.query('SAVEPOINT order_insert');
+    try {
+      const result = await insertFn(orderNumber);
+      await client.query('RELEASE SAVEPOINT order_insert');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK TO SAVEPOINT order_insert');
+      if (err.code !== '23505') throw err;
+    }
+  }
+  throw new Error('Захиалгын дугаар үүсгэхэд алдаа гарлаа. Дахин оролдоно уу.');
+}
 
 // items: [{ menu_item_id, quantity, guest_name }]
 ordersRouter.post('/', requireSession, validateBody(createOrderSchema), async (req, res) => {
@@ -15,11 +36,11 @@ ordersRouter.post('/', requireSession, validateBody(createOrderSchema), async (r
   try {
     await client.query('BEGIN');
 
-    const order = await client.query(
-      `INSERT INTO orders (session_id, status, total_usd)
-       VALUES ($1, 'pending', 0) RETURNING *`,
-      [session_id]
-    );
+    const order = await insertOrder(client, (orderNumber) => client.query(
+      `INSERT INTO orders (session_id, status, total_usd, order_number)
+       VALUES ($1, 'pending', 0, $2) RETURNING *`,
+      [session_id, orderNumber]
+    ));
     const orderId = order.rows[0].id;
 
     let total = 0;
@@ -214,11 +235,11 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
       total += addonUnitPrice;
     }
 
-    const orderRes = await client.query(
-      `INSERT INTO orders (session_id, status, total_usd, plan_start_date, plan_end_date, plan_day_count)
-       VALUES ($1, 'pending', $2, $3, $4, $5) RETURNING id`,
-      [session_id, total, window.firstAvailableDate, window.endDate, window.dayCount]
-    );
+    const orderRes = await insertOrder(client, (orderNumber) => client.query(
+      `INSERT INTO orders (session_id, status, total_usd, plan_start_date, plan_end_date, plan_day_count, order_number)
+       VALUES ($1, 'pending', $2, $3, $4, $5, $6) RETURNING id`,
+      [session_id, total, window.firstAvailableDate, window.endDate, window.dayCount, orderNumber]
+    ));
     const orderId = orderRes.rows[0].id;
 
     for (const item of resolvedItems) {

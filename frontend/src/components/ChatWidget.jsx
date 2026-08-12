@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import io from 'socket.io-client';
 import { MessageCircle, X, Send, ArrowLeft } from 'lucide-react';
+import { formatOrderNumber, normalizeOrderNumber } from '../lib/orderNumber';
 
-const ORDER_ID_KEY = 'chat_order_id';
+const ORDER_NUMBER_KEY = 'chat_order_id';
 
 export function ChatWidget({ tr }) {
   const [open, setOpen] = useState(false);
-  const [orderId, setOrderId] = useState(null);
+  // Богино захиалгын дугаар (зураасгүй, жишээ нь "4XK9P2QW") — гэрчлэлт
+  // амжилттай болсны дараа тавигдана, гэхдээ дотоод socket room/message-ийн
+  // харьцуулалт хэвээрээ бодит UUID (order.id) дээр тулгуурлана (resolvedOrderIdRef).
+  const [orderNumber, setOrderNumber] = useState(null);
   const [messages, setMessages] = useState([]);
   const [gateInput, setGateInput] = useState('');
   const [gateError, setGateError] = useState('');
@@ -16,11 +20,10 @@ export function ChatWidget({ tr }) {
   const [unread, setUnread] = useState(false);
 
   const socketRef = useRef(null);
-  const orderIdRef = useRef(null);
+  const resolvedOrderIdRef = useRef(null);
   const openRef = useRef(false);
   const scrollRef = useRef(null);
 
-  useEffect(() => { orderIdRef.current = orderId; }, [orderId]);
   useEffect(() => { openRef.current = open; }, [open]);
 
   // Socket connection lives for the widget's whole lifetime — mirrors the
@@ -29,7 +32,7 @@ export function ChatWidget({ tr }) {
     const socket = io(window.location.origin);
     socketRef.current = socket;
     socket.on('chat:message', (row) => {
-      if (row.order_id !== orderIdRef.current) return;
+      if (row.order_id !== resolvedOrderIdRef.current) return;
       // The guest's own socket is a member of chat:<orderId>, so a message it
       // just sent (and already appended optimistically below) echoes back here
       // too — skip it by id instead of appending a visible duplicate.
@@ -39,21 +42,22 @@ export function ChatWidget({ tr }) {
     return () => socket.disconnect();
   }, []);
 
-  // Resume a cached thread (same browser) without re-asking for the order ID.
+  // Resume a cached thread (same browser) without re-asking for the order number.
   // `ignore` guards against React StrictMode's dev-mode double-invoke firing
   // this fetch twice on mount and racing itself.
   useEffect(() => {
-    const cached = localStorage.getItem(ORDER_ID_KEY);
+    const cached = localStorage.getItem(ORDER_NUMBER_KEY);
     if (!cached) return;
     let ignore = false;
     fetch(`/api/chat/${cached}/messages`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (ignore) return;
-        if (!data) { localStorage.removeItem(ORDER_ID_KEY); return; }
-        setOrderId(cached);
+        if (!data) { localStorage.removeItem(ORDER_NUMBER_KEY); return; }
+        resolvedOrderIdRef.current = data.order.id;
+        setOrderNumber(data.order.order_number);
         setMessages(data.messages);
-        socketRef.current?.emit('chat:join', cached);
+        socketRef.current?.emit('chat:join', data.order.id);
       })
       .catch(() => {});
     return () => { ignore = true; };
@@ -70,21 +74,22 @@ export function ChatWidget({ tr }) {
 
   const handleGateSubmit = async (e) => {
     e.preventDefault();
-    const id = gateInput.trim();
-    if (!id) return;
+    const code = normalizeOrderNumber(gateInput);
+    if (!code) return;
     setGateLoading(true);
     setGateError('');
     try {
-      const res = await fetch(`/api/chat/${id}/messages`);
-      // Server errors (invalid UUID / not found) are Mongolian admin-facing
+      const res = await fetch(`/api/chat/${code}/messages`);
+      // Server errors (invalid format / not found) are Mongolian admin-facing
       // strings, not part of this guest-facing i18n set — always show the
       // translated copy here instead of surfacing the raw server message.
       if (!res.ok) throw new Error(tr.chatGateNotFound);
       const data = await res.json();
-      localStorage.setItem(ORDER_ID_KEY, id);
-      setOrderId(id);
+      localStorage.setItem(ORDER_NUMBER_KEY, data.order.order_number);
+      resolvedOrderIdRef.current = data.order.id;
+      setOrderNumber(data.order.order_number);
       setMessages(data.messages);
-      socketRef.current?.emit('chat:join', id);
+      socketRef.current?.emit('chat:join', data.order.id);
       setGateInput('');
     } catch {
       setGateError(tr.chatGateNotFound);
@@ -94,8 +99,9 @@ export function ChatWidget({ tr }) {
   };
 
   const handleChangeOrder = () => {
-    localStorage.removeItem(ORDER_ID_KEY);
-    setOrderId(null);
+    localStorage.removeItem(ORDER_NUMBER_KEY);
+    resolvedOrderIdRef.current = null;
+    setOrderNumber(null);
     setMessages([]);
     setGateInput('');
     setGateError('');
@@ -108,7 +114,7 @@ export function ChatWidget({ tr }) {
     setSending(true);
     setDraft('');
     try {
-      const res = await fetch(`/api/chat/${orderId}/messages`, {
+      const res = await fetch(`/api/chat/${orderNumber}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
@@ -160,7 +166,7 @@ export function ChatWidget({ tr }) {
             padding: '14px 18px', background: 'var(--brand-green)', color: '#fff',
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            {orderId && (
+            {orderNumber && (
               <button onClick={handleChangeOrder} title={tr.chatChangeOrderBtn} style={{ color: '#fff', background: 'transparent', display: 'flex' }}>
                 <ArrowLeft size={18} />
               </button>
@@ -168,15 +174,20 @@ export function ChatWidget({ tr }) {
             <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.95rem' }}>
               {tr.chatHeaderTitle}
             </span>
+            {orderNumber && (
+              <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: '0.75rem', opacity: 0.85 }}>
+                {formatOrderNumber(orderNumber)}
+              </span>
+            )}
           </div>
 
-          {!orderId ? (
+          {!orderNumber ? (
             <form onSubmit={handleGateSubmit} style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-dark)' }}>{tr.chatGateTitle}</p>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{tr.chatGateDesc}</p>
               <input
                 value={gateInput}
-                onChange={(e) => setGateInput(e.target.value)}
+                onChange={(e) => setGateInput(e.target.value.toUpperCase())}
                 placeholder={tr.chatGatePlaceholder}
                 autoFocus
                 style={{

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -H 'Cookie: admin_token=__CMDSUB_OUTPUT__' http://localhost:4000/api/admin/orders)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -H 'Cookie: admin_token=__TRACKED_VAR__' http://localhost:4000/api/admin/orders)",
+      "Bash(lsof -i :4000 -sTCP:LISTEN)",
+      "Bash(kill 49654 36958)",
+      "Bash(nohup node --watch src/index.js)",
+      "Bash(disown)",
+      "Bash(curl -s http://localhost:4000/health)",
+      "Bash(npm run *)"
+    ]
+  }
+}

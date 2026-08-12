@@ -3,6 +3,10 @@ import { z } from 'zod';
 export const uuidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const uuidSchema = (msg) => z.string().regex(uuidPattern, msg || 'Зөв UUID байх ёстой');
 
+// Зочид/admin-д харуулах богино захиалгын дугаар — src/services/orderNumber.js-ийн
+// тэмдэгтийн сантай (0/O, 1/I/L хассан) тааруулав.
+export const orderNumberPattern = /^[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{8}$/;
+
 export function validateBody(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.body);

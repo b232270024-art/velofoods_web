@@ -1,5 +1,6 @@
 import https from 'https';
 import { URL } from 'url';
+import { getUsdToMntRate } from './exchangeRate.js';
 
 // Node 16 дээр global fetch байхгүй тул native https ашиглав (шинэ dependency
 // нэмэхгүйн тулд). https.request нь HTTP/HTTPS хоёуланг зохицуулна.
@@ -64,18 +65,18 @@ function hipayRequest(method, pathname, { query, body } = {}) {
 
 // $ дүнг Hipay руу илгээх дүн рүү хөрвүүлнэ. HIPAY_CURRENCY нь заавал
 // тохируулагдсан байх ёстой — тохируулаагүй бол буруу дүнгээр төлбөр авахаас
-// зайлсхийхийн тулд бүрэн зогсоно (fail fast).
-export function convertUsdForHipay(amountUsd) {
+// зайлсхийхийн тулд бүрэн зогсоно (fail fast). 'MNT' үед ханшийг гараар
+// биш, Монголбанкнаас тухайн өдрийн албан ёсны ханшаар автоматаар авна
+// (exchangeRate.js) — ханш авч чадахгүй бол мөн адил fail fast зарчмаар
+// төлбөрийг эхлүүлэхгүй.
+export async function convertUsdForHipay(amountUsd) {
   const currency = requiredEnv('HIPAY_CURRENCY');
 
   if (currency === 'USD') {
     return { amount: Number(amountUsd), currency, fxRate: 1 };
   }
   if (currency === 'MNT') {
-    const rate = Number(requiredEnv('HIPAY_USD_TO_MNT_RATE'));
-    if (!Number.isFinite(rate) || rate <= 0) {
-      throw new Error('HIPAY_USD_TO_MNT_RATE утга буруу байна.');
-    }
+    const rate = await getUsdToMntRate();
     return { amount: Math.round(Number(amountUsd) * rate), currency, fxRate: rate };
   }
   throw new Error(`HIPAY_CURRENCY утга дэмжигдэхгүй байна: ${currency} (зөвхөн 'USD' эсвэл 'MNT')`);
