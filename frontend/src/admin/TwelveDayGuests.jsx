@@ -24,9 +24,12 @@ function fmtDate(dateStr) {
 }
 
 // 'YYYY-MM-DD' -> 'сарын/өдөр' богино формат, TZ-гүй (энэ бол хуанлийн огноо, цаг биш).
+// admin /orders нь date багануудыг бүтэн ISO timestamp хэлбэрээр буцаадаг
+// (жишээ нь '2026-08-17T05:00:00.000Z') тул эхний 10 тэмдэгтийг (огнооны
+// хэсгийг) л авна — өөрөөр '17T05:00:00.000Z' гэж задарч NaN болдог байсан.
 function fmtPlanDate(dateStr) {
   if (!dateStr) return '—';
-  const [, m, d] = dateStr.split('-');
+  const [, m, d] = dateStr.slice(0, 10).split('-');
   return `${Number(m)}/${Number(d)}`;
 }
 
