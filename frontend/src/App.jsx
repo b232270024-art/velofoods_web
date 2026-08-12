@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import io from 'socket.io-client';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, MessageCircle } from 'lucide-react';
 
 import { Header } from './components/Header';
+import { ChatWidget } from './components/ChatWidget';
 import { HeroSection } from './components/HeroSection';
 import { TodaySpecialOffers } from './components/TodaySpecialOffers';
 import { HowItWorks } from './components/HowItWorks';
@@ -452,11 +453,13 @@ export default function App() {
         showCart={flowStep === 'menu'}
         tr={tr}
         onOpenAbout={() => { goToStep('about_us'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-        onOpenMenu={() => { goToStep('menu'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onOpenMenu={() => { setOrderType('one_time'); goToStep('menu'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
         onBackToHome={handleBackToHome}
         hasOrderHistory={hasOrderHistory}
         onOpenHistory={() => { goToStep('order_history'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
       />
+
+      <ChatWidget tr={tr} />
 
       <main style={{ flex: 1 }}>
         {toast && <div className="toast">{toast}</div>}
@@ -600,10 +603,56 @@ export default function App() {
                 : tr.orderConfirmedDesc}
             </p>
             {activeOrder && (
-              <div className="card" style={{ padding: 24, textAlign: 'left', marginBottom: 24 }}>
-                <p style={{ fontWeight: 700 }}>{tr.orderStatus}: <strong style={{ textTransform: 'uppercase' }}>{activeOrder.status}</strong></p>
-                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: 6 }}>Total: ${Number(activeOrder.total_usd).toFixed(2)}</p>
-              </div>
+              <>
+                <div style={{
+                  display: 'flex', gap: 12, textAlign: 'left',
+                  background: 'var(--bg-yellow-light)', border: '1px solid var(--accent-yellow)',
+                  borderRadius: 'var(--r-md)', padding: '16px 18px', marginBottom: 20,
+                }}>
+                  <MessageCircle size={20} color="var(--accent-orange)" style={{ flexShrink: 0, marginTop: 2 }} />
+                  <p style={{ color: 'var(--text-dark)', fontSize: '0.85rem', lineHeight: 1.65, fontWeight: 500 }}>
+                    {tr.orderConfirmedChatNote}
+                  </p>
+                </div>
+
+                <div className="card" style={{ padding: 24, textAlign: 'left', marginBottom: 24 }}>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    {tr.orderIdLabel}
+                  </p>
+                  <p style={{ fontFamily: 'monospace', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-dark)', marginTop: 4, marginBottom: 16, wordBreak: 'break-all' }}>
+                    {activeOrder.id}
+                  </p>
+
+                  <p style={{ fontWeight: 700 }}>{tr.orderStatus}: <strong style={{ textTransform: 'uppercase' }}>{activeOrder.status}</strong></p>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: 6 }}>Total: ${Number(activeOrder.total_usd).toFixed(2)}</p>
+
+                  {Array.isArray(activeOrder.items) && activeOrder.items.length > 0 && (
+                    <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+                      <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.9rem', marginBottom: 10 }}>
+                        {tr.reviewItemsTitle}
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {activeOrder.items.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                              padding: '8px 0', borderBottom: '1px solid var(--border)',
+                            }}
+                          >
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-body)' }}>
+                              <strong style={{ color: 'var(--text-dark)' }}>{item.quantity}×</strong> {item.name}
+                            </span>
+                            <span style={{ fontWeight: 700, color: 'var(--text-dark)', fontSize: '0.85rem' }}>
+                              ${(Number(item.unit_price_usd) * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
             <button className="btn-outline" onClick={handleBackToHome} style={{ margin: '0 auto' }}>
               {tr.backToHomeBtn}

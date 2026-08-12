@@ -12,6 +12,7 @@ export const MANUAL_KEYS = [
   'heroDesc',          // "Certified Halal & Vegan..." — certification claim
   'aboutDesc',         // mentions "Halal certified dishes"
   'refundWarning',     // refund policy — legal wording
+  'orderConfirmedChatNote', // refund/support-request instructions on the payment-success page
   'agreeTermsPrefix',  // terms-of-service agreement label
   'agreeTermsLink',    // "Terms of Service & Refund Policy"
   'termsModalTitle',   // "Terms of Service & Policies"

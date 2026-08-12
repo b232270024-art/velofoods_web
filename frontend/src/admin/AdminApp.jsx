@@ -6,6 +6,7 @@ import { TwelveDayGuests } from './TwelveDayGuests';
 import { MenuManager } from './MenuManager';
 import { PlanManager } from './PlanManager';
 import { SettingsPage } from './SettingsPage';
+import { ChatPage } from './ChatPage';
 
 function LoginForm({ onLoggedIn }) {
   const [username, setUsername] = useState('');
@@ -73,6 +74,7 @@ const TAB_LABEL = {
   plan: '12 хоногийн цэс',
   orders: 'Захиалгууд',
   twelve_day_guests: '12 хоногийн захиалгууд',
+  chat: 'Чат',
   settings: 'Тохиргоо',
 };
 
@@ -105,6 +107,8 @@ function Dashboard({ onLoggedOut }) {
             <OrdersBoard />
           ) : tab === 'twelve_day_guests' ? (
             <TwelveDayGuests />
+          ) : tab === 'chat' ? (
+            <ChatPage />
           ) : tab === 'settings' ? (
             <SettingsPage />
           ) : (

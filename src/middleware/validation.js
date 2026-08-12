@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const uuidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+export const uuidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 const uuidSchema = (msg) => z.string().regex(uuidPattern, msg || 'Зөв UUID байх ёстой');
 
 export function validateBody(schema) {
@@ -155,6 +155,11 @@ export const updatePlanCycleSchema = z.object({
 export const adminLoginSchema = z.object({
   username: z.string().trim().min(1, 'Нэвтрэх нэр хоосон байж болохгүй').max(100),
   password: z.string().min(1, 'Нууц үг хоосон байж болохгүй').max(200),
+});
+
+// Зочин ↔ админ чатын нэг мессеж (chat.js болон admin.js хоёулаа ашиглана)
+export const chatMessageSchema = z.object({
+  message: z.string().trim().min(1, 'Мессеж хоосон байж болохгүй').max(1000, 'Мессеж хэт урт байна'),
 });
 
 export const paymentInitiateSchema = z.object({

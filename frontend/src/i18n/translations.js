@@ -226,6 +226,23 @@ export const t = {
     locationConfirmed: 'Location confirmed — adjust the pin if needed',
     locationDetectFail: 'Could not detect location — tap the map to set it manually',
     locationRequiredHint: 'Set your delivery location on the map above to continue.',
+
+    // Support chat widget (floating bottom-right bubble, guest ↔ admin)
+    chatFabLabel: 'Chat with us',
+    chatHeaderTitle: 'Support Chat',
+    chatGateTitle: 'Enter your Order ID',
+    chatGateDesc: 'Enter the Order ID from your order confirmation to start chatting with our support team.',
+    chatGatePlaceholder: 'Paste your Order ID',
+    chatGateSubmitBtn: 'Continue',
+    chatGateNotFound: "We couldn't find an order with that ID. Please check and try again.",
+    chatGreeting: 'Hi! If you have any questions for us, write them below.',
+    chatInputPlaceholder: 'Type a message…',
+    chatSendBtn: 'Send',
+    chatChangeOrderBtn: 'Use a different order',
+
+    // Order confirmation — Order ID + refund/support note (added alongside the chat widget)
+    orderIdLabel: 'Order ID',
+    orderConfirmedChatNote: 'Please save your Order ID below. If you need a refund or have any other request, open the chat in the bottom-right corner and let us know your Order ID.',
   },
 
   ar: {
@@ -412,6 +429,19 @@ export const t = {
     genericError: "لقد حدث خطأ ما. برجاء إعادة المحاولة.",
     menuPlanInfoNote: "يجب تقديم الطلبات قبل يوم واحد على الأقل، لذلك تعتمد الأيام المتاحة والسعر على وقت الطلب. اضغط على \"تبديل\" في أي وجبة لاختيار طبق مختلف.",
     menuPlanReviewChangeNote: "بمجرد الدفع، يرجى الاتصال بنا مباشرة إذا كنت بحاجة إلى تغيير أي من اختيارات الوجبات اليومية.",
+    chatFabLabel: "تحدث معنا",
+    chatHeaderTitle: "دردشة الدعم",
+    chatGateTitle: "أدخل رقم طلبك",
+    chatGateDesc: "أدخل رقم الطلب الموجود في تأكيد طلبك لبدء الدردشة مع فريق الدعم لدينا.",
+    chatGatePlaceholder: "الصق رقم طلبك",
+    chatGateSubmitBtn: "متابعة",
+    chatGateNotFound: "لم نتمكن من العثور على طلب بهذا الرقم. يرجى التحقق والمحاولة مرة أخرى.",
+    chatGreeting: "مرحباً! إذا كان لديك أي أسئلة لنا، اكتبها أدناه.",
+    chatInputPlaceholder: "اكتب رسالة…",
+    chatSendBtn: "إرسال",
+    chatChangeOrderBtn: "استخدام طلب آخر",
+    orderIdLabel: "رقم الطلب",
+    orderConfirmedChatNote: "يرجى حفظ رقم طلبك أدناه. إذا كنت بحاجة إلى استرداد أو لديك أي طلب آخر، افتح الدردشة في الزاوية اليمنى السفلى وأخبرنا برقم طلبك.",
   },
 
   hi: {
@@ -598,6 +628,19 @@ export const t = {
     genericError: "कोई गड़बड़ हो गई, कृपया दोबारा कोशिश करें।",
     menuPlanInfoNote: "ऑर्डर कम - से - कम एक दिन पहले दिए जाने चाहिए, इसलिए आपके उपलब्ध दिन और किराया इस बात पर निर्भर करता है कि आप कब ऑर्डर करते हैं। कोई दूसरा व्यंजन चुनने के लिए किसी भी खाने पर \"स्वैप करें\" पर टैप करें।",
     menuPlanReviewChangeNote: "भुगतान करने के बाद, अगर आपको अपनी रोज़मर्रा की खाने की कोई भी पसंद बदलनी है, तो कृपया हमसे सीधे संपर्क करें।",
+    chatFabLabel: "हमसे चैट करें",
+    chatHeaderTitle: "सहायता चैट",
+    chatGateTitle: "अपना ऑर्डर आईडी दर्ज करें",
+    chatGateDesc: "हमारी सहायता टीम के साथ चैट शुरू करने के लिए अपने ऑर्डर पुष्टिकरण से ऑर्डर आईडी दर्ज करें।",
+    chatGatePlaceholder: "अपना ऑर्डर आईडी पेस्ट करें",
+    chatGateSubmitBtn: "जारी रखें",
+    chatGateNotFound: "हमें उस आईडी वाला कोई ऑर्डर नहीं मिला। कृपया जांचें और पुनः प्रयास करें।",
+    chatGreeting: "नमस्ते! यदि आपके कोई प्रश्न हैं, तो उन्हें नीचे लिखें।",
+    chatInputPlaceholder: "संदेश लिखें…",
+    chatSendBtn: "भेजें",
+    chatChangeOrderBtn: "दूसरा ऑर्डर उपयोग करें",
+    orderIdLabel: "ऑर्डर आईडी",
+    orderConfirmedChatNote: "कृपया नीचे दिया गया अपना ऑर्डर आईडी सहेज लें। यदि आपको रिफंड चाहिए या कोई अन्य अनुरोध है, तो नीचे दाईं ओर स्थित चैट खोलें और हमें अपना ऑर्डर आईडी बताएं।",
   },
 };
 

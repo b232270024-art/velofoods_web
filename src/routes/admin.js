@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/pool.js';
-import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema } from '../middleware/validation.js';
+import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema, chatMessageSchema } from '../middleware/validation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { loginLimiter } from '../middleware/rateLimiter.js';
@@ -357,4 +357,76 @@ adminRouter.patch('/orders/:id/status', validateBody(updateOrderStatusSchema), a
   io.to('admin').emit('order:updated', rows[0]);
 
   res.json(rows[0]);
+}));
+
+// --- Зочин ↔ админ чат (src/routes/chat.js-ийн admin тал) -----------------
+// Зочин талд requireSession/order эзэмшлийн шалгалт байхгүй (order_id өөрөө
+// түлхүүр) тул эндээс ч бид зөвхөн order_id-аар нэгтгэж харуулна.
+
+// Захиалга тус бүрийн сүүлийн мессеж + уншаагүй тооноор эрэмбэлсэн жагсаалт.
+adminRouter.get('/chat/threads', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT cm.order_id,
+            o.status AS order_status, o.total_usd,
+            s.guest_name,
+            last_msg.message AS last_message,
+            last_msg.sender AS last_sender,
+            last_msg.created_at AS last_message_at,
+            COALESCE(unread.n, 0)::int AS unread_count
+     FROM (SELECT DISTINCT order_id FROM chat_messages) cm
+     JOIN orders o ON o.id = cm.order_id
+     JOIN sessions s ON s.id = o.session_id
+     JOIN LATERAL (
+       SELECT message, sender, created_at FROM chat_messages
+       WHERE order_id = cm.order_id ORDER BY created_at DESC LIMIT 1
+     ) last_msg ON true
+     LEFT JOIN LATERAL (
+       SELECT COUNT(*)::int AS n FROM chat_messages
+       WHERE order_id = cm.order_id AND sender = 'guest' AND read_by_admin = false
+     ) unread ON true
+     ORDER BY last_msg.created_at DESC
+     LIMIT 200`
+  );
+  res.json(rows);
+}));
+
+// Тухайн захиалгын бүх мессеж + захиалгын дэлгэрэнгүй — уншсанд тооцож
+// (read_by_admin=true) тэмдэглэнэ.
+adminRouter.get('/chat/:orderId/messages', asyncHandler(async (req, res) => {
+  const order = await pool.query(
+    `SELECT o.id, o.status, o.total_usd, o.created_at, s.guest_name, s.room_number, s.hotel_name
+     FROM orders o JOIN sessions s ON s.id = o.session_id WHERE o.id = $1`,
+    [req.params.orderId]
+  );
+  if (order.rows.length === 0) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+
+  const messages = await pool.query(
+    'SELECT id, sender, message, created_at FROM chat_messages WHERE order_id = $1 ORDER BY created_at ASC',
+    [req.params.orderId]
+  );
+  await pool.query(
+    `UPDATE chat_messages SET read_by_admin = true WHERE order_id = $1 AND sender = 'guest' AND read_by_admin = false`,
+    [req.params.orderId]
+  );
+
+  res.json({ order: order.rows[0], messages: messages.rows });
+}));
+
+adminRouter.post('/chat/:orderId/messages', validateBody(chatMessageSchema), asyncHandler(async (req, res) => {
+  const order = await pool.query('SELECT id FROM orders WHERE id = $1', [req.params.orderId]);
+  if (order.rows.length === 0) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+
+  const { message } = req.body;
+  const { rows } = await pool.query(
+    `INSERT INTO chat_messages (order_id, sender, message)
+     VALUES ($1, 'admin', $2) RETURNING id, order_id, sender, message, created_at`,
+    [req.params.orderId, message]
+  );
+  const row = rows[0];
+
+  const io = req.app.get('io');
+  io.to(`chat:${req.params.orderId}`).emit('chat:message', row);
+  io.to('admin').emit('chat:message', row);
+
+  res.status(201).json(row);
 }));

@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, UtensilsCrossed, ClipboardList, CalendarDays, Users, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, ClipboardList, CalendarDays, Users, Settings, LogOut, MessageCircle } from 'lucide-react';
 
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { key: 'plan', label: '12 хоногийн цэс', icon: CalendarDays },
   { key: 'orders', label: 'Захиалгууд', icon: ClipboardList },
   { key: 'twelve_day_guests', label: '12 хоногийн захиалгууд', icon: Users },
+  { key: 'chat', label: 'Чат', icon: MessageCircle },
   { key: 'settings', label: 'Тохиргоо', icon: Settings },
 ];
 

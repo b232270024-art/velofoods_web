@@ -2,6 +2,7 @@
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+DROP TABLE IF EXISTS chat_messages CASCADE;
 DROP TABLE IF EXISTS twelve_day_plan_items CASCADE;
 DROP TABLE IF EXISTS twelve_day_cycle_settings CASCADE;
 DROP TABLE IF EXISTS payments CASCADE;
@@ -167,6 +168,20 @@ CREATE TABLE payments (
   paid_at                timestamptz
 );
 CREATE INDEX idx_payments_order ON payments(order_id);
+
+-- Захиалга тус бүрийн доор нээгддэг зочин ↔ админ шууд чат — зочин
+-- захиалгын ID-гаараа (нэвтрэлтгүйгээр) чатыг нээнэ, admin dashboard-ийн
+-- Чат хуудаснаас хариулна. order_id нь өөрөө "нэвтрэх түлхүүр" болдог тул
+-- (Hipay redirect-ийн ?order_id= адил) session-тэй холбоо шаардлагагүй.
+CREATE TABLE chat_messages (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id       uuid NOT NULL REFERENCES orders(id),
+  sender         text NOT NULL CHECK (sender IN ('guest', 'admin')),
+  message        text NOT NULL,
+  read_by_admin  boolean NOT NULL DEFAULT false,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_chat_messages_order ON chat_messages(order_id);
 
 -- Initial Seed Data
 INSERT INTO restaurants (id, name) VALUES

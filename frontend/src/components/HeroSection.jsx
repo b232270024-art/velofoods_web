@@ -2,18 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { ArrowDown, Truck, ShoppingBag } from 'lucide-react';
 
 const DISH_IMAGES = [
-  '/images/1.webp',
-  '/images/2.webp',
-  '/images/3.webp',
-  '/images/4.webp',
-  '/images/5.webp',
+  '/images/1_normalized.webp',
+  '/images/2_normalized.webp',
+  '/images/3_normalized.webp',
+  '/images/4_normalized.webp',
+  '/images/5_normalized.webp',
 ];
 
 const ROTATE_INTERVAL_MS = 3000;
 const ORBIT_RADIUS_PCT = 46;
 
-// 4 satellite slots fanned out in a semicircle below the big circle
-// (0deg = right, 90deg = straight down, 180deg = left).
 const ORBIT_SLOTS = [
   { angle: 36, size: 100 },
   { angle: 72, size: 90 },
@@ -83,27 +81,19 @@ function DeliveryCard() {
       width: 390,
       paddingTop: '16px',
       paddingBottom: '16px',
-
-      // Transparent glass background
       background: 'rgba(255, 255, 255, 0.17)',
       border: '1px solid rgba(255, 255, 255, 0.41)',
       backdropFilter: 'blur(12px)',
       WebkitBackdropFilter: 'blur(12px)',
-
       borderRadius: 20,
       padding: '24px 28px',
       boxShadow: '0 10px 35px rgba(0,0,0,0.08)',
-
       display: 'flex',
       flexDirection: 'column',
       gap: 20,
-
       overflow: 'hidden',
-
-      // Behind food image
       zIndex: 1,
     }}>
-
       <div style={{
         position: 'absolute',
         top: -18,
@@ -126,7 +116,6 @@ function DeliveryCard() {
         opacity: 0.5,
       }} />
 
-
       <div style={{
         position: 'relative',
         display: 'flex',
@@ -145,26 +134,15 @@ function DeliveryCard() {
         }}>
           <Truck size={16} color="var(--text-dark)" />
         </div>
-
         <div>
-          <div style={{
-            color: 'var(--text-dark)',
-            fontWeight: 700,
-            fontSize: '0.82rem'
-          }}>
+          <div style={{ color: 'var(--text-dark)', fontWeight: 700, fontSize: '0.82rem' }}>
             Next Day Delivery
           </div>
-
-          <div style={{
-            color: 'var(--text-muted)',
-            fontSize: '0.68rem',
-            fontWeight: 500
-          }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 500 }}>
             Order today and receive your fresh meals tomorrow at your hotel or current location
           </div>
         </div>
       </div>
-
 
       <div style={{
         position: 'relative',
@@ -184,30 +162,18 @@ function DeliveryCard() {
         }}>
           <ShoppingBag size={16} color="var(--text-dark)" />
         </div>
-
         <div>
-          <div style={{
-            color: 'var(--text-dark)',
-            fontWeight: 700,
-            fontSize: '0.82rem'
-          }}>
+          <div style={{ color: 'var(--text-dark)', fontWeight: 700, fontSize: '0.82rem' }}>
             Location Delivery
           </div>
-
-          <div style={{
-            color: 'var(--text-muted)',
-            fontSize: '0.68rem',
-            fontWeight: 500
-          }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', fontWeight: 500 }}>
             We deliver directly to your hotel room or current location.
           </div>
         </div>
       </div>
-
     </div>
   );
 }
-
 
 function SmallDishSlots({ activeIndex }) {
   const smallDishIndices = DISH_IMAGES.map((_, i) => i).filter((i) => i !== activeIndex);
@@ -220,7 +186,6 @@ function SmallDishSlots({ activeIndex }) {
         const x = 50 + ORBIT_RADIUS_PCT * Math.cos(rad);
         const y = 50 + ORBIT_RADIUS_PCT * Math.sin(rad);
         return (
-          // Keyed by slot (not dish) so this wrapper stays mounted as dishes swap.
           <div
             key={`slot-${slot}`}
             className="dish-small-slot"
@@ -251,13 +216,13 @@ function DishCircle({ activeIndex }) {
     <div id="hero-image-wrapper" className="anim-fade-up anim-delay-2" style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
       <div style={{
         position: 'relative',
-        width: '100%', maxWidth: 520,
+        width: '100%', maxWidth: 620,
         aspectRatio: '1/1',
-        borderRadius: '50%',
+        borderRadius: '100%',
         background: 'radial-gradient(circle, rgba(254,243,199,0.7) 0%, rgba(236,253,245,0.3) 70%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <div id="dish-cycle" style={{ position: 'relative', width: '90%', height: '90%', borderRadius: '50%', overflow: 'hidden', zIndex: 3 }}>
+        <div id="dish-cycle" style={{ position: 'relative', width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', zIndex: 3 }}>
           <img
             key={DISH_IMAGES[activeIndex]}
             src={DISH_IMAGES[activeIndex]}
@@ -299,6 +264,7 @@ const HERO_STYLES = `
   @media (max-width: 768px) {
     #hero-grid { grid-template-columns: 1fr !important; gap: 40px !important; }
     #hero-image-wrapper { display: none !important; }
+    .hero-wave-shape { display: none !important; }
   }
 `;
 
@@ -309,9 +275,41 @@ export function HeroSection({ tr, onGetStarted }) {
     <section style={{
       position: 'relative',
       background: 'var(--bg-cream)',
-      padding: '50px 0 70px',
+      marginTop: '-88px',
+      paddingTop: '118px',
+      paddingBottom: '120px',
       overflow: 'hidden',
     }}>
+      <svg
+        className="hero-wave-shape"
+        aria-hidden="true"
+        viewBox="0 0 900 1440"
+        preserveAspectRatio="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 0,
+          pointerEvents: 'none',
+        }}
+      >
+        <path
+          d="
+      M 400 0
+      C 250 200, 200 500, 300 800
+      C 400 1100, 450 1300, 400 1440
+      L 900 1440
+      L 900 0
+      Z
+    "
+          fill="#34d399"
+          opacity="0.15"
+        />
+      </svg>
+
+      {/* Texture дэвсгэр */}
       <div id="hero-bg-layer" aria-hidden="true" style={{
         position: 'absolute',
         inset: 0,
@@ -319,10 +317,12 @@ export function HeroSection({ tr, onGetStarted }) {
         backgroundSize: '420px',
         backgroundPosition: 'center',
         backgroundRepeat: 'repeat',
-        opacity: 0.15,
+        opacity: 0.04,
         pointerEvents: 'none',
         zIndex: 0,
       }} />
+
+      {/* MAIN CONTENT */}
       <div className="container" style={{ position: 'relative', zIndex: 1 }}>
         <div id="hero-grid" style={{
           display: 'grid',

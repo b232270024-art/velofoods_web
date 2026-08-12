@@ -19,6 +19,8 @@ import { adminRouter } from './routes/admin.js';
 import { paymentsRouter } from './routes/payments.js';
 import { geocodeRouter } from './routes/geocode.js';
 import { uploadRouter } from './routes/upload.js';
+import { chatRouter } from './routes/chat.js';
+import { uuidPattern } from './middleware/validation.js';
 
 import { logger } from './services/logger.js';
 import { startSessionCleanupJob } from './services/sessionCleanup.js';
@@ -141,6 +143,13 @@ io.on('connection', (socket) => {
   socket.on('join:room', (roomNumber) => {
     socket.join(`room:${roomNumber}`);
   });
+  // Захиалгын ID нь өөрөө "нэвтрэх түлхүүр" болдог тул (доорх chat route-уудтай
+  // адил) нэмэлт баталгаажуулалт шаардахгүй — зөвхөн формат шалгана.
+  socket.on('chat:join', (orderId) => {
+    if (typeof orderId === 'string' && uuidPattern.test(orderId)) {
+      socket.join(`chat:${orderId}`);
+    }
+  });
 });
 
 // Session болон захиалга үүсгэх зэрэг "бичих" endpoint-д илүү хатуу rate limit
@@ -150,7 +159,12 @@ app.use('/api/orders', writeLimiter, ordersRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/payments', writeLimiter, paymentsRouter);
 app.use('/api/geocode', geocodeRouter);
-app.use('/api/upload', uploadRouter);
+// Бусад "бичих" route-уудтай адил rate limit тавьсан — өмнө нь upload
+// endpoint дээр огт хязгаар байгаагүй (зөвхөн requireAdmin шалгадаг байсан)
+// тул нэг admin session алдагдвал/эсвэл frontend-д давхар дарагдах bug
+// гарвал disk дүүртэл дараалан upload хийгдэх боломжтой байв.
+app.use('/api/upload', writeLimiter, uploadRouter);
+app.use('/api/chat', writeLimiter, chatRouter);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 

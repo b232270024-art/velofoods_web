@@ -1,6 +1,53 @@
 import React from 'react';
 import { ShoppingBag, Bike, Utensils } from 'lucide-react';
 
+// Хажуу талд бүдгэрүүлж тавих хоолны зургууд — шинэ зураг оруулаагүй тул
+// байгаа dish зургуудаас (hero-д ашигладагтай ижил) шимийн ногоо/шөл шиг
+// "цэвэрхэн" харагдах хоёрыг сонгосон (кебаб/мах шиг илт биш).
+const SIDE_DECOR_IMAGES = ['/images/1_normalized.webp', '/images/3_normalized.webp'];
+
+function SideDecor({ side }) {
+  const isLeft = side === 'left';
+  const spots = [
+    { top: '4%', offset: -70, size: 200 },
+    { top: '54%', offset: -120, size: 160 },
+  ];
+  return (
+    <div
+      className="how-side-decor"
+      aria-hidden="true"
+      style={{
+        position: 'absolute', top: 0, bottom: 0,
+        [isLeft ? 'left' : 'right']: 0,
+        width: 260, zIndex: 0, pointerEvents: 'none',
+      }}
+    >
+      {spots.map((spot, i) => (
+        <img
+          key={i}
+          src={SIDE_DECOR_IMAGES[i]}
+          alt=""
+          style={{
+            position: 'absolute',
+            top: spot.top,
+            [isLeft ? 'left' : 'right']: spot.offset,
+            width: spot.size, height: spot.size,
+            borderRadius: '50%',
+            objectFit: 'cover',
+            opacity: 0.9,
+            // Зурагны ирмэгийг дэвсгэр рүү зөөлөн бүдгэрүүлж холихын тулд
+            // radial mask ашиглав — ингэснээр цагаан дэвсгэртэй эх зургууд
+            // ард талын ногоон градиент рүү шимэгдэж, тод ирмэггүй харагдана.
+            WebkitMaskImage: 'radial-gradient(circle, black 52%, transparent 76%)',
+            maskImage: 'radial-gradient(circle, black 52%, transparent 76%)',
+          }}
+          onError={(e) => { e.target.style.display = 'none'; }}
+        />
+      ))}
+    </div>
+  );
+}
+
 const STEPS = [
   {
     icon: ShoppingBag,
@@ -27,8 +74,34 @@ const STEPS = [
 
 export function HowItWorks({ tr }) {
   return (
-    <section style={{ padding: '80px 0', background: 'var(--bg-cream)' }}>
-      <div className="container">
+    <section
+      style={{
+        padding: '80px 0',
+        position: 'relative',
+        overflow: 'hidden',
+
+        background: `
+      radial-gradient(
+        ellipse 42% 100% at 0% 50%,
+        rgba(74, 222, 128, 0.45) 0%,
+        rgba(134, 239, 172, 0.28) 25%,
+        rgba(209, 250, 229, 0.10) 55%,
+        transparent 100%
+      ),
+      radial-gradient(
+        ellipse 42% 100% at 100% 50%,
+        rgba(74, 222, 128, 0.45) 0%,
+        rgba(134, 239, 172, 0.28) 25%,
+        rgba(209, 250, 229, 0.10) 55%,
+        transparent 100%
+      ),
+      var(--bg-cream)
+    `,
+      }}
+    >
+      <SideDecor side="left" />
+      <SideDecor side="right" />
+      <div className="container" style={{ position: 'relative', zIndex: 1 }}>
         {/* Section Title */}
         <div className="anim-fade-up" style={{ textAlign: 'center', marginBottom: 16 }}>
           <h2 className="heading-lg">
@@ -92,6 +165,9 @@ export function HowItWorks({ tr }) {
         <style>{`
           @media (max-width: 600px) {
             #how-grid { grid-template-columns: 1fr !important; }
+          }
+          @media (max-width: 900px) {
+            .how-side-decor { display: none !important; }
           }
         `}</style>
       </div>
