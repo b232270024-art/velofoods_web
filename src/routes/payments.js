@@ -22,7 +22,13 @@ paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandl
 
   if (gateway_provider === 'hipay') {
     const logger = req.app.get('logger');
-    const { amount, currency, fxRate } = await convertUsdForHipay(order.rows[0].total_usd);
+    let amount, currency, fxRate;
+    try {
+      ({ amount, currency, fxRate } = await convertUsdForHipay(order.rows[0].total_usd));
+    } catch (err) {
+      req.app.get('logger').error('Hipay-д дүн хөрвүүлэхэд алдаа', { order_id, error: err.message });
+      return res.status(502).json({ error: 'Hipay тохиргоо эсвэл ханш авахад алдаа гарлаа.', details: err.message });
+    }
 
     logger.info('Hipay checkout эхлүүлж байна', { order_id, amount, currency });
 
