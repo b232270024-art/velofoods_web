@@ -70,6 +70,9 @@ function OrderRow({ order, onChangeStatus, updating, selectedRestaurant }) {
   const deliveryInfo = order.room_number
     ? `${order.hotel_name ? order.hotel_name + ' · ' : ''}Өрөө ${order.room_number}`
     : order.delivery_address || '—';
+  const deliveryTimeInfo = order.delivery_window_start && order.delivery_window_end
+    ? `${order.delivery_window_start}–${order.delivery_window_end}`
+    : null;
 
   // Restaurants involved in this order (unique)
   const restaurantNames = [...new Set(items.map(i => i.restaurant_name).filter(Boolean))];
@@ -101,6 +104,9 @@ function OrderRow({ order, onChangeStatus, updating, selectedRestaurant }) {
           </div>
           <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: 2 }}>
             {deliveryInfo}
+            {deliveryTimeInfo && (
+              <span style={{ color: 'var(--brand-green-btn)', fontWeight: 700 }}> · {deliveryTimeInfo}</span>
+            )}
           </div>
         </td>
         {/* Ресторан */}

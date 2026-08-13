@@ -227,6 +227,14 @@ export const t = {
     locationDetectFail: 'Could not detect location — tap the map to set it manually',
     locationRequiredHint: 'Set your delivery location on the map above to continue.',
 
+    // Delivery time slot picker (one-time orders, shown on the order review page)
+    deliveryTimeTitle: 'What time should we deliver tomorrow?',
+    deliveryTimeHint: 'All one-time orders are delivered the next day — pick the window that works best for you.',
+    deliveryTimeMorning: 'Morning',
+    deliveryTimeMidday: 'Midday',
+    deliveryTimeEvening: 'Evening',
+    deliveryTimeRequiredHint: 'Choose a delivery time above to continue.',
+
     // Support chat widget (floating bottom-right bubble, guest ↔ admin)
     chatFabLabel: 'Chat with us',
     chatHeaderTitle: 'Support Chat',
@@ -442,6 +450,12 @@ export const t = {
     chatChangeOrderBtn: "استخدام طلب آخر",
     orderIdLabel: "رقم الطلب",
     orderConfirmedChatNote: "يرجى حفظ رقم طلبك أدناه. إذا كنت بحاجة إلى استرداد أو لديك أي طلب آخر، افتح الدردشة في الزاوية اليمنى السفلى وأخبرنا برقم طلبك.",
+    deliveryTimeTitle: "في أي وقت يجب أن نسلم غدًا ؟",
+    deliveryTimeHint: "يتم توصيل جميع الطلبات لمرة واحدة في اليوم التالي — اختر النافذة التي تناسبك بشكل أفضل.",
+    deliveryTimeMorning: "الفترة الصباحية",
+    deliveryTimeMidday: "منتصف اليوم",
+    deliveryTimeEvening: "الفترة المسائية",
+    deliveryTimeRequiredHint: "اختر موعد توصيل أعلاه للمتابعة.",
   },
 
   hi: {
@@ -641,6 +655,12 @@ export const t = {
     chatChangeOrderBtn: "दूसरा ऑर्डर उपयोग करें",
     orderIdLabel: "ऑर्डर आईडी",
     orderConfirmedChatNote: "कृपया नीचे दिया गया अपना ऑर्डर आईडी सहेज लें। यदि आपको रिफंड चाहिए या कोई अन्य अनुरोध है, तो नीचे दाईं ओर स्थित चैट खोलें और हमें अपना ऑर्डर आईडी बताएं।",
+    deliveryTimeTitle: "हमें कल किस समय डिलीवरी करनी चाहिए?",
+    deliveryTimeHint: "सभी एक बार के ऑर्डर अगले दिन डिलीवर कर दिए जाते हैं — वह विंडो चुनें जो आपके लिए सबसे अच्छा हो।",
+    deliveryTimeMorning: "सुबह",
+    deliveryTimeMidday: "दोपहर",
+    deliveryTimeEvening: "शाम",
+    deliveryTimeRequiredHint: "जारी रखने के लिए ऊपर दिया गया डिलीवरी का समय चुनें।",
   },
 };
 

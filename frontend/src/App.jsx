@@ -60,6 +60,8 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [menuItems, setMenuItems] = useState([]);
   const [cart, setCart] = useState([]);
+  const [deliveryTimeSlots, setDeliveryTimeSlots] = useState([]);
+  const [selectedTimeSlotId, setSelectedTimeSlotId] = useState(null);
   const [activeOrder, setActiveOrder] = useState(null);
   const [paymentResult, setPaymentResult] = useState(null); // 'paid' | 'new' | 'canceled' | 'expired' | 'invalid' | 'unknown' | 'error' | null
   const [hasOrderHistory, setHasOrderHistory] = useState(() => getOrderHistory().length > 0);
@@ -175,6 +177,13 @@ export default function App() {
       .then(r => r.json())
       .then(items => {
         if (Array.isArray(items)) setMenuItems(items);
+      })
+      .catch(console.error);
+
+    fetch('/api/menu/delivery-time-slots')
+      .then(r => r.json())
+      .then(slots => {
+        if (Array.isArray(slots)) setDeliveryTimeSlots(slots);
       })
       .catch(console.error);
   }, []);
@@ -293,6 +302,7 @@ export default function App() {
     setPlanSelections([]);
     setPlanReviewItems([]);
     setPlanAddonId(null);
+    setSelectedTimeSlotId(null);
     goToStep('hero');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -396,6 +406,7 @@ export default function App() {
   const handlePayNow = async () => {
     if (!agreeTerms) return;
     if (!session && (!pendingAddress.trim() || !pendingGeo)) return;
+    if (deliveryTimeSlots.length > 0 && !selectedTimeSlotId) return;
 
     setSubmitting(true);
     try {
@@ -430,6 +441,7 @@ export default function App() {
         credentials: 'include',
         body: JSON.stringify({
           items: cart.map(c => ({ menu_item_id: c.menu_item_id, quantity: c.quantity, guest_name: activeSession.guest_name })),
+          delivery_time_slot_id: selectedTimeSlotId,
         }),
       });
       const orderData = await orderRes.json();
@@ -437,6 +449,7 @@ export default function App() {
       await payForOrder(orderData);
       setCart([]);
       setAgreeTerms(false);
+      setSelectedTimeSlotId(null);
     } catch (err) {
       showToast(err.message || 'Order failed');
     } finally {
@@ -577,6 +590,9 @@ export default function App() {
                 setPendingAddress(address);
                 setPendingGeo(lat != null && lng != null ? { lat, lng } : null);
               }}
+              timeSlots={deliveryTimeSlots}
+              selectedTimeSlotId={selectedTimeSlotId}
+              onSelectTimeSlot={setSelectedTimeSlotId}
               agreeTerms={agreeTerms}
               onToggleAgree={setAgreeTerms}
               onOpenTerms={() => setTermsModalOpen(true)}

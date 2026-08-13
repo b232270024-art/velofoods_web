@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/pool.js';
-import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema, chatMessageSchema } from '../middleware/validation.js';
+import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema, chatMessageSchema, updateDeliveryTimeSlotSchema } from '../middleware/validation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { loginLimiter } from '../middleware/rateLimiter.js';
@@ -140,6 +140,52 @@ adminRouter.delete('/diet-types/:id', asyncHandler(async (req, res) => {
   res.json({ deleted: true, id: rows[0].id });
 }));
 
+// --- Хүргэлтийн цагийн хүрээ (one-time захиалгын "маргааш хэдэн цагт
+// хүргэх вэ" сонголт, Тохиргоо хуудаснаас удирдана) -------------------------
+// 3 цонх (morning/midday/evening) тогтмол — зөвхөн цаг хүрээ + идэвхжилтийг
+// өөрчилдөг тул нэмэх/устгах route байхгүй. Идэвхгүй цонхыг ч (checkbox-оор
+// дахин асаах боломжтой байлгахын тулд) энд бүгдийг буцаана — guest талын
+// /api/menu/delivery-time-slots харин зөвхөн active=true-г л буцаадаг.
+adminRouter.get('/delivery-time-slots', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, period, substring(start_time::text, 1, 5) AS start_time,
+            substring(end_time::text, 1, 5) AS end_time, active, sort_order
+     FROM delivery_time_slots ORDER BY sort_order`
+  );
+  res.json(rows);
+}));
+
+adminRouter.patch('/delivery-time-slots/:id', validateBody(updateDeliveryTimeSlotSchema), asyncHandler(async (req, res) => {
+  const { start_time, end_time, active } = req.body;
+
+  const current = await pool.query(
+    `SELECT substring(start_time::text, 1, 5) AS start_time,
+            substring(end_time::text, 1, 5) AS end_time
+     FROM delivery_time_slots WHERE id = $1`,
+    [req.params.id]
+  );
+  if (current.rows.length === 0) return res.status(404).json({ error: 'Цагийн хүрээ олдсонгүй.' });
+
+  const effectiveStart = start_time ?? current.rows[0].start_time;
+  const effectiveEnd = end_time ?? current.rows[0].end_time;
+  if (effectiveEnd <= effectiveStart) {
+    return res.status(400).json({ error: 'Дуусах цаг эхлэх цагаас хожуу байх ёстой.' });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE delivery_time_slots SET
+       start_time = COALESCE($1, start_time),
+       end_time   = COALESCE($2, end_time),
+       active     = COALESCE($3, active),
+       updated_at = now()
+     WHERE id = $4
+     RETURNING id, period, substring(start_time::text, 1, 5) AS start_time,
+               substring(end_time::text, 1, 5) AS end_time, active, sort_order`,
+    [start_time ?? null, end_time ?? null, active ?? null, req.params.id]
+  );
+  res.json(rows[0]);
+}));
+
 // --- Dashboard-ийн үзүүлэлт (нийт хоол, захиалга, орлого, сүүлийн захиалгууд) ---
 adminRouter.get('/stats', asyncHandler(async (req, res) => {
   const [menuCount, orderStats, recent] = await Promise.all([
@@ -181,6 +227,8 @@ adminRouter.get('/orders', asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT o.id, o.order_number, o.status, o.total_usd, o.created_at,
             o.plan_start_date, o.plan_end_date, o.plan_day_count,
+            o.delivery_period, substring(o.delivery_window_start::text, 1, 5) AS delivery_window_start,
+            substring(o.delivery_window_end::text, 1, 5) AS delivery_window_end,
             s.guest_name, s.room_number, s.hotel_name, s.delivery_address, s.delivery_type,
             s.order_type, s.diet_type_id, s.allergy_tags, s.allergy_other,
             (SELECT json_agg(json_build_object(

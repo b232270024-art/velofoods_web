@@ -1,10 +1,12 @@
 import React from 'react';
 import { AlertTriangle, ChevronLeft, MapPin, User } from 'lucide-react';
 import { LocationPicker } from './LocationPicker';
+import { DeliveryTimeSlotPicker } from './DeliveryTimeSlotPicker';
 
 export function OrderReview({
   cart, session, deliveryType,
   pendingGuestName, pendingAddress, pendingGeo, onLocationChange,
+  timeSlots, selectedTimeSlotId, onSelectTimeSlot,
   agreeTerms, onToggleAgree, onOpenTerms,
   onPay, isSubmitting, onEditDetails, onBack, tr,
 }) {
@@ -15,7 +17,8 @@ export function OrderReview({
   const needsLocation = deliveryType === 'current_location' && !session;
   const guestName = session?.guest_name || pendingGuestName;
   const addressText = session?.delivery_address || pendingAddress;
-  const canPay = agreeTerms && (!needsLocation || (pendingAddress.trim() && pendingGeo));
+  const needsTimeSlot = timeSlots && timeSlots.length > 0;
+  const canPay = agreeTerms && (!needsLocation || (pendingAddress.trim() && pendingGeo)) && (!needsTimeSlot || selectedTimeSlotId);
 
   return (
     <div className="anim-fade-up" style={{ maxWidth: 640, margin: '0 auto', padding: '40px 0 100px' }}>
@@ -43,6 +46,14 @@ export function OrderReview({
           tr={tr}
         />
       )}
+
+      {/* Tomorrow's delivery time window — placed right below the location map */}
+      <DeliveryTimeSlotPicker
+        slots={timeSlots}
+        selectedId={selectedTimeSlotId}
+        onSelect={onSelectTimeSlot}
+        tr={tr}
+      />
 
       {/* Red refund warning */}
       <div style={{
@@ -148,6 +159,12 @@ export function OrderReview({
       {needsLocation && !(pendingAddress.trim() && pendingGeo) && (
         <p style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 600, marginBottom: 10 }}>
           {tr.locationRequiredHint}
+        </p>
+      )}
+
+      {needsTimeSlot && !selectedTimeSlotId && (
+        <p style={{ fontSize: '0.78rem', color: '#b45309', fontWeight: 600, marginBottom: 10 }}>
+          {tr.deliveryTimeRequiredHint}
         </p>
       )}
 

@@ -30,6 +30,16 @@ if (process.env.DATABASE_URL) {
     keepAlive: true,
     ssl: isLocalhost ? false : { rejectUnauthorized: false },
   });
+
+  // node-postgres нь idle client сүлжээний алдаатай таарвал pool дээр 'error'
+  // event ялгаруулдаг — сонсогч (listener) байхгүй бол Node үүнийг barigdaagүй
+  // алдаа гэж үзээд БҮХ процессыг унагаана (payments route-той ижил урсгал дээр
+  // ажилладаг websocket холболтуудыг ч хамт live-аас унагасан өмнөх production
+  // incident-той яг адил эвдрэлийн хэлбэр). Энд зөвхөн логдоод, дараагийн query
+  // үед pool өөрөө шинэ connection нээх тул нэмэлт сэргээх код шаардлагагүй.
+  realPool.on('error', (err) => {
+    console.log('⚠️ PostgreSQL pool-д idle client дээр гэнэтийн алдаа гарлаа (процесс амьд үлдэнэ):', err.message);
+  });
 }
 
 // In-Memory Database Store as fallback if PostgreSQL is not configured or offline.

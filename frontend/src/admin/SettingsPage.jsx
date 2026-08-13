@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pencil, Check, X, Plus, Trash2, AlertTriangle } from 'lucide-react';
 
+const DELIVERY_PERIOD_LABEL = { morning: 'Өглөө', midday: 'Өдөр', evening: 'Орой' };
+
 function EditableRow({ item, editingId, draftName, onStartEdit, onDraftChange, onSave, onCancel, onDelete, saving }) {
   const isEditing = editingId === item.id;
   return (
@@ -65,14 +67,18 @@ export function SettingsPage() {
   const [cycleSaving, setCycleSaving] = useState(false);
   const [cycleSaved, setCycleSaved] = useState(false);
 
+  const [timeSlots, setTimeSlots] = useState([]);
+  const [timeSlotSavingId, setTimeSlotSavingId] = useState(null);
+
   const fetchAll = useCallback(async () => {
     try {
-      const [rRes, dRes, cRes] = await Promise.all([
+      const [rRes, dRes, cRes, tRes] = await Promise.all([
         fetch('/api/menu/restaurants'),
         fetch('/api/menu/diet-types'),
         fetch('/api/admin/plan-cycle'),
+        fetch('/api/admin/delivery-time-slots', { credentials: 'include' }),
       ]);
-      const [r, d, c] = await Promise.all([rRes.json(), dRes.json(), cRes.json()]);
+      const [r, d, c, ts] = await Promise.all([rRes.json(), dRes.json(), cRes.json(), tRes.json()]);
       if (Array.isArray(r)) setRestaurants(r);
       if (Array.isArray(d)) setDietTypes(d);
       if (c?.start_date) {
@@ -80,6 +86,7 @@ export function SettingsPage() {
         setCycleEndDate(c.end_date);
         setCycleDraft(c.start_date);
       }
+      if (Array.isArray(ts)) setTimeSlots(ts);
       setError('');
     } catch {
       setError('Мэдээлэл татахад алдаа гарлаа.');
@@ -87,6 +94,26 @@ export function SettingsPage() {
       setLoading(false);
     }
   }, []);
+
+  // --- Хүргэлтийн цагийн хүрээ ---
+  const saveTimeSlot = async (id, patch) => {
+    setTimeSlotSavingId(id);
+    try {
+      const res = await fetch(`/api/admin/delivery-time-slots/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Хадгалахад алдаа гарлаа.');
+      setTimeSlots(prev => prev.map(s => s.id === id ? data : s));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTimeSlotSavingId(null);
+    }
+  };
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -308,6 +335,54 @@ export function SettingsPage() {
             )}
             {cycleSaved && <span style={{ fontSize: '0.8rem', color: 'var(--brand-green)', fontWeight: 700 }}>✓ Хадгалагдлаа</span>}
           </form>
+        )}
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+        <h3 style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.9rem', marginBottom: 4 }}>
+          Хүргэлтийн цагийн хүрээ
+        </h3>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 14 }}>
+          "Нэг удаагийн" захиалгын Review хуудсанд зочноос "маргааш хэдэн цагт хүргэх вэ" гэж асуухад ашиглагдана
+          (хүргэлт үргэлж маргааш явна). Идэвхгүй болгосон цонх зочинд харагдахгүй. Аль хэдийн захиалга өгсөн зочны
+          сонгосон цаг эндээс өөрчлөгдсөн ч өөрчлөгдөхгүй.
+        </p>
+        {loading ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Ачааллаж байна...</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {timeSlots.map(slot => (
+              <div key={slot.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ width: 60, fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-dark)' }}>
+                  {DELIVERY_PERIOD_LABEL[slot.period] || slot.period}
+                </span>
+                <input
+                  type="time"
+                  defaultValue={slot.start_time}
+                  disabled={timeSlotSavingId === slot.id}
+                  onBlur={e => e.target.value && e.target.value !== slot.start_time && saveTimeSlot(slot.id, { start_time: e.target.value })}
+                  style={{ padding: '7px 9px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: '0.82rem' }}
+                />
+                <span style={{ color: 'var(--text-muted)' }}>—</span>
+                <input
+                  type="time"
+                  defaultValue={slot.end_time}
+                  disabled={timeSlotSavingId === slot.id}
+                  onBlur={e => e.target.value && e.target.value !== slot.end_time && saveTimeSlot(slot.id, { end_time: e.target.value })}
+                  style={{ padding: '7px 9px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: '0.82rem' }}
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={slot.active}
+                    disabled={timeSlotSavingId === slot.id}
+                    onChange={e => saveTimeSlot(slot.id, { active: e.target.checked })}
+                  />
+                  Идэвхтэй
+                </label>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

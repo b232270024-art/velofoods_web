@@ -30,17 +30,29 @@ async function insertOrder(client, insertFn) {
 
 // items: [{ menu_item_id, quantity, guest_name }]
 ordersRouter.post('/', requireSession, validateBody(createOrderSchema), asyncHandler(async (req, res) => {
-  const { items } = req.body;
+  const { items, delivery_time_slot_id } = req.body;
   const { session_id } = req.session;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Зочны сонгосон хүргэлтийн цонхыг захиалга үүсэх мөчид ЦАРЦААЖ авна —
+    // admin дараа нь delivery_time_slots-ийн цаг хүрээг өөрчилсөн ч аль
+    // хэдийн үүссэн энэ захиалгад нөлөөлөхгүй.
+    const slot = await client.query(
+      `SELECT period, start_time, end_time FROM delivery_time_slots WHERE id = $1 AND active = true`,
+      [delivery_time_slot_id]
+    );
+    if (slot.rows.length === 0) {
+      throw new Error('Сонгосон хүргэлтийн цаг боломжгүй байна. Дахин сонгоно уу.');
+    }
+    const { period, start_time, end_time } = slot.rows[0];
+
     const order = await insertOrder(client, (orderNumber) => client.query(
-      `INSERT INTO orders (session_id, status, total_usd, order_number)
-       VALUES ($1, 'pending', 0, $2) RETURNING *`,
-      [session_id, orderNumber]
+      `INSERT INTO orders (session_id, status, total_usd, order_number, delivery_period, delivery_window_start, delivery_window_end)
+       VALUES ($1, 'pending', 0, $2, $3, $4, $5) RETURNING *`,
+      [session_id, orderNumber, period, start_time, end_time]
     ));
     const orderId = order.rows[0].id;
 
@@ -313,7 +325,13 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
 
 ordersRouter.get('/:id', requireSession, async (req, res) => {
   const order = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
-  if (order.rows.length === 0) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+  // session_id тааруулж эзэмшлийг шалгана — эс бөгөөс хүчинтэй ямар ч session
+  // (өөрөөр хэлбэл ямар ч зочин) бусдын захиалгын дэлгэрэнгүйг (хаяг, нэр,
+  // захиалсан зүйлс) зөвхөн UUID-г мэдэхэд л уншиж чадна байсан. "Олдсонгүй"
+  // гэж адилхан хариулснаар эзэмшигчгүй ч гэсэн ID оршин байгааг ил гаргахгүй.
+  if (order.rows.length === 0 || order.rows[0].session_id !== req.session.session_id) {
+    return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+  }
 
   const items = await pool.query(
     `SELECT oi.*, mi.name FROM order_items oi

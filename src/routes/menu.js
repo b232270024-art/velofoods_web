@@ -52,6 +52,18 @@ menuRouter.get('/plan', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
+// GET /api/menu/delivery-time-slots — идэвхтэй хүргэлтийн цагийн цонхнууд
+// (админ Тохиргоо хуудаснаас тохируулна) — one-time захиалгын Review
+// дэлгэцэд зочноос "маргааш хэдэн цагт хүргэх вэ" гэж асуухад ашиглана.
+menuRouter.get('/delivery-time-slots', asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT id, period, substring(start_time::text, 1, 5) AS start_time,
+            substring(end_time::text, 1, 5) AS end_time
+     FROM delivery_time_slots WHERE active = true ORDER BY sort_order`
+  );
+  res.json(rows);
+}));
+
 // GET /api/menu/plan-cycle — идэвхтэй хоолны захиалгын эргэлтийн эхлэх/дуусах огноо.
 // Auth шаардахгүй — зочны PlanPreview болон admin Тохиргоо хуудас хоёулаа ашиглана.
 menuRouter.get('/plan-cycle', asyncHandler(async (req, res) => {

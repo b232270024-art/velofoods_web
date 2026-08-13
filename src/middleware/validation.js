@@ -119,6 +119,8 @@ export const createOrderSchema = z.object({
       })
     )
     .min(1, 'Захиалгад дор хаяж нэг зүйл байх ёстой'),
+  // Зочны сонгосон "маргааш хэдэн цагт хүргэх вэ" цонх (delivery_time_slots.id).
+  delivery_time_slot_id: uuidSchema('delivery_time_slot_id зөв UUID байх ёстой'),
 });
 
 // 'paid'-г зориудаар хассан — энэ статусыг зөвхөн баталгаажсан Hipay
@@ -153,6 +155,17 @@ export const createPlanOrderSchema = z.object({
   addon_menu_item_id: uuidSchema('addon_menu_item_id зөв UUID байх ёстой').nullish(),
 });
 
+const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Цаг HH:MM хэлбэртэй байх ёстой');
+
+// PATCH /api/admin/delivery-time-slots/:id — admin эхлэх/дуусах цаг эсвэл
+// идэвхтэй эсэхийг өөрчилнө. day/period солигдохгүй (3 цонх тогтмол) —
+// зөвхөн цаг хүрээ болон идэвхжилтийг тохируулна.
+export const updateDeliveryTimeSlotSchema = z.object({
+  start_time: timeStringSchema.nullish(),
+  end_time: timeStringSchema.nullish(),
+  active: z.boolean().nullish(),
+});
+
 export const updatePlanCycleSchema = z.object({
   start_date: dateStringSchema,
   end_date: dateStringSchema,
@@ -171,7 +184,11 @@ export const chatMessageSchema = z.object({
   message: z.string().trim().min(1, 'Мессеж хоосон байж болохгүй').max(1000, 'Мессеж хэт урт байна'),
 });
 
+// Зөвхөн 'hipay'-г л зөвшөөрнө — бусад gateway (2c2p/airwallex/bank/qpay)
+// хараахан бодитоор холбогдоогүй тул зөвшөөрвөл /webhook/:provider-ийг
+// (баталгаажуулалтгүй) ашиглаж хэн ч мөнгөгүйгээр захиалгыг "paid" болгож
+// чадна (src/routes/payments.js).
 export const paymentInitiateSchema = z.object({
   order_id: uuidSchema('order_id зөв UUID байх ёстой'),
-  gateway_provider: z.string().transform(v => v.toLowerCase()).pipe(z.enum(['2c2p', 'airwallex', 'bank', 'qpay', 'hipay'])),
+  gateway_provider: z.string().transform(v => v.toLowerCase()).pipe(z.enum(['hipay'])),
 });

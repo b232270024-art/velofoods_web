@@ -12,8 +12,8 @@ import {
 export const paymentsRouter = Router();
 
 // Захиалгын үнийг доллараар авч, сонгосон gateway руу илгээх мөчид
-// дуудагдана. hipay бол бодит checkout API дуудна; бусад gateway
-// (2C2P/Airwallex/банк) хараахан холбогдоогүй тул placeholder хэвээр.
+// дуудагдана. Одоогоор зөвхөн hipay бодитоор холбогдсон
+// (paymentInitiateSchema бусад gateway_provider утгыг зөвшөөрдөггүй).
 paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandler(async (req, res) => {
   const debugApi = process.env.DEBUG_API_ERRORS === '1';
   try {
@@ -73,16 +73,14 @@ paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandl
     });
   }
 
-  // TODO: бусад gateway (2c2p/airwallex/bank/qpay) холбогдох
-  const placeholderTransactionId = `pending_${order_id}_${Date.now()}`;
-
-    const { rows } = await pool.query(
-      `INSERT INTO payments (order_id, gateway_provider, currency, amount_usd, transaction_id, status)
-       VALUES ($1, $2, 'USD', $3, $4, 'pending') RETURNING *`,
-      [order_id, gateway_provider, order.rows[0].total_usd, placeholderTransactionId]
-    );
-
-    res.status(201).json(rows[0]);
+  // Бусад gateway (2c2p/airwallex/bank/qpay) хараахан холбогдоогүй тул энд
+  // хүрэхгүй ёстой (paymentInitiateSchema зөвхөн 'hipay'-г зөвшөөрдөг) — гэхдээ
+  // fail-safe байдлаар тодорхой алдаа буцаана. Өмнө нь эдгээр provider-т
+  // 'pending' payment мөр шууд үүсгээд transaction_id-г нь клиентэд буцаадаг
+  // байсан нь /webhook/:provider (доор) руу хэн ч гараар {transaction_id,
+  // status:'paid'} илгээгээд мөнгөгүйгээр захиалгыг "paid" болгож чадах
+  // цоорхой байв.
+  return res.status(400).json({ error: `"${gateway_provider}" gateway одоогоор холбогдоогүй байна.` });
   } catch (err) {
     const logger = req.app.get('logger');
     logger.error('payments.initiate handler error', { error: err.message, stack: err.stack });
@@ -121,7 +119,14 @@ async function settleHipayCheckout(checkoutId) {
       return { settled: false, hipayStatus };
     }
 
-    await client.query("UPDATE orders SET status = 'paid' WHERE id = $1", [result.rows[0].order_id]);
+    // status NOT IN (...) — auto-cancel cron (orderAutoCancel.js) 2 цагийн дотор
+    // төлбөр ороогүй 'pending' захиалгыг цуцалдаг. Хэрэв яг тэр мөчид Hipay-ийн
+    // хариу оройтож ирвэл (жишээ нь сүлжээ саатсан) энэ UPDATE аль хэдийн
+    // цуцлагдсан/буцаагдсан захиалгыг гэнэт "paid" болгож сэргээхээс сэргийлнэ.
+    await client.query(
+      "UPDATE orders SET status = 'paid' WHERE id = $1 AND status NOT IN ('cancelled', 'refunded')",
+      [result.rows[0].order_id]
+    );
     await client.query('COMMIT');
     return { settled: true, hipayStatus, payment: result.rows[0] };
   } catch (err) {
@@ -188,53 +193,18 @@ paymentsRouter.post('/hipay/redirect/:checkoutId/:paymentId', asyncHandler(handl
 paymentsRouter.get('/hipay/redirect', asyncHandler(handleHipayRedirect));
 paymentsRouter.post('/hipay/redirect', asyncHandler(handleHipayRedirect));
 
-// Гараагүй gateway-уудад (2c2p/airwallex/bank/qpay) зориулсан placeholder
-// webhook — эдгээрийг бодитоор холбосон код одоогоор байхгүй тул энэ route
-// хараахан хэрэглэгддэггүй. hipay-г ЭНД зайлсхийж байгаа шалтгаан: hipay-ийн
-// webhook/redirect хоёулаа signature-гүй тул payment=paid статусыг зөвхөн
-// Hipay-аас өөрөөс нь server-to-server дахин баталгаажуулсны дараа
-// (settleHipayCheckout) л зөвшөөрдөг. Хэрэв provider='hipay'-г энд ч бас
-// зөвшөөрвөл хэн ч энэ route руу шууд {transaction_id, status:'paid'}
-// хуурамч хүсэлт илгээгээд баталгаажуулалтгүйгээр захиалгыг "paid" болгож
-// чадах нээлттэй цоорхой болно.
-paymentsRouter.post('/webhook/:provider', async (req, res) => {
-  if (req.params.provider === 'hipay') {
-    return res.status(404).json({ error: 'hipay зөвхөн /webhook/hipay (GET) болон /hipay/redirect-ээр баталгаажина.' });
-  }
-
-  const { transaction_id, status, amount_charged_local, fx_rate_applied } = req.body;
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const result = await client.query(
-      `UPDATE payments
-       SET status = $1, amount_charged_local = $2, fx_rate_applied = $3,
-           paid_at = CASE WHEN $1 = 'paid' THEN now() ELSE paid_at END
-       WHERE transaction_id = $4
-       RETURNING *`,
-      [status, amount_charged_local ?? null, fx_rate_applied ?? null, transaction_id]
-    );
-
-    if (result.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Гүйлгээ олдсонгүй.' });
-    }
-
-    if (status === 'paid') {
-      await client.query("UPDATE orders SET status = 'paid' WHERE id = $1", [
-        result.rows[0].order_id,
-      ]);
-    }
-
-    await client.query('COMMIT');
-    res.json({ received: true });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    req.app.get('logger').error('Webhook алдаа', { error: err.message, transaction_id });
-    res.status(500).json({ error: 'Webhook боловсруулахад алдаа гарлаа.' });
-  } finally {
-    client.release();
-  }
+// Гараагүй gateway-уудад (2c2p/airwallex/bank/qpay) зориулсан webhook — эдгээр
+// одоогоор бодитоор холбогдоогүй тул ЗОРИУДААР идэвхгүй (404). Өмнө нь энэ
+// route req.body-оос ирсэн {transaction_id, status} хос-г ямар ч signature/
+// баталгаажуулалтгүйгээр шууд итгэж payments.status болон orders.status-ыг
+// 'paid' болгодог байсан — /api/payments/initiate-аар ямар ч (жинхэнэ бус)
+// gateway_provider-аар "pending" payment мөр үүсгээд түүний transaction_id-г
+// уншаад энэ route руу дахин илгээхэд хэн ч мөнгөгүйгээр захиалгаа "paid"
+// болгож чаддаг байсан (paymentInitiateSchema одоо зөвхөн 'hipay'-г
+// зөвшөөрдөг болсон ч энэ route дангаараа мөн адил эмзэг хэвээр байсан тул
+// хамтад нь хаав). hipay зөвхөн /webhook/hipay (GET, доор) болон
+// /hipay/redirect-ээр л баталгаажина — тэдгээр нь Hipay-аас өөрөөс нь
+// server-to-server дахин баталгаажуулдаг (settleHipayCheckout).
+paymentsRouter.post('/webhook/:provider', (req, res) => {
+  res.status(404).json({ error: `"${req.params.provider}" gateway одоогоор холбогдоогүй байна.` });
 });

@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS orders CASCADE;
 DROP TABLE IF EXISTS menu_items CASCADE;
 DROP TABLE IF EXISTS restaurants CASCADE;
 DROP TABLE IF EXISTS diet_types CASCADE;
+DROP TABLE IF EXISTS delivery_time_slots CASCADE;
 DROP TABLE IF EXISTS sessions CASCADE;
 
 DROP TYPE IF EXISTS order_status CASCADE;
@@ -18,12 +19,14 @@ DROP TYPE IF EXISTS session_status CASCADE;
 DROP TYPE IF EXISTS session_order_type CASCADE;
 DROP TYPE IF EXISTS session_delivery_type CASCADE;
 DROP TYPE IF EXISTS meal_time CASCADE;
+DROP TYPE IF EXISTS delivery_period CASCADE;
 
 CREATE TYPE order_status AS ENUM ('pending', 'paid', 'cancelled', 'refunded');
 CREATE TYPE session_status AS ENUM ('active', 'expired');
 CREATE TYPE session_order_type AS ENUM ('twelve_day', 'one_time');
 CREATE TYPE session_delivery_type AS ENUM ('hotel', 'current_location');
 CREATE TYPE meal_time AS ENUM ('morning', 'lunch', 'evening');
+CREATE TYPE delivery_period AS ENUM ('morning', 'midday', 'evening');
 
 -- 2-3 өөр гал тогооны нэгж (dining outlet) ажилладаг — admin dashboard-ийн
 -- Menu/Orders хуудсуудын гол filter нь энэ. Ресторан бүр яг нэг diet_type-д
@@ -45,6 +48,20 @@ CREATE TABLE diet_types (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name       text NOT NULL UNIQUE,
   created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- One-time захиалгын "маргааш хэдэн цагт хүргэх вэ" сонголт — 3 тогтмол
+-- цонх (өглөө/өдөр/орой), admin Тохиргоо хуудаснаас цаг хүрээ + идэвхтэй
+-- эсэхийг өөрчилнө. Зочны сонголт нь захиалга үүсэх мөчид orders руу
+-- царцаж хадгалагддаг тул энд хийсэн засвар зөвхөн ЦААШИДЫН захиалгад нөлөөлнө.
+CREATE TABLE delivery_time_slots (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  period      delivery_period NOT NULL UNIQUE,
+  start_time  time NOT NULL,
+  end_time    time NOT NULL,
+  active      boolean NOT NULL DEFAULT true,
+  sort_order  smallint NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
 ALTER TABLE restaurants ADD CONSTRAINT restaurants_diet_type_id_fkey
@@ -115,7 +132,15 @@ CREATE TABLE orders (
   -- start_date дараа өөрчлөгдсөн ч хуучин захиалга өөрчлөгдөхгүй.
   plan_start_date  date,
   plan_end_date    date,
-  plan_day_count   integer
+  plan_day_count   integer,
+  -- Зөвхөн one_time захиалгад бөглөгдөнө (12 хоногийн план дээр NULL) — зочны
+  -- сонгосон "маргаашийн хүргэлт хэдэн цагт" гэсэн хүсэлтийг захиалга үүсэх
+  -- мөчид delivery_time_slots-оос ЦАРЦААЖ хадгална (admin дараа нь цагийн
+  -- хүрээгээ өөрчилсөн ч аль хэдийн үүссэн захиалгын хүргэлтийн цаг хэвээрээ
+  -- үлдэнэ — FK биш, шууд утга хуулж авна).
+  delivery_period       delivery_period,
+  delivery_window_start time,
+  delivery_window_end   time
 );
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_session ON orders(session_id);
@@ -260,3 +285,9 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO twelve_day_cycle_settings (id, start_date) VALUES (true, '2026-08-17')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO delivery_time_slots (period, start_time, end_time, sort_order) VALUES
+('morning', '07:00', '08:00', 0),
+('midday',  '12:00', '14:00', 1),
+('evening', '17:00', '19:00', 2)
+ON CONFLICT (period) DO NOTHING;
