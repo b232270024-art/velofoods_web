@@ -441,22 +441,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
               </>
             );
           })()}
-                    <MealTimeSection
-                      key={meal}
-                      date={currentDay.date}
-                      mealKey={meal}
-                      label={mealLabels[meal]}
-                      categories={currentDay.meals[meal] || {}}
-                      selections={selections[currentDay.date]?.[meal]}
-                      onSelect={handleSelect}
-                    />
-                  ))}
-                </div>
 
-                <AddonSection menuItems={menuItems} tr={tr} addonId={addonId} onSelect={setAddonId} />
-              </>
-            );
-          })()}
         </>
       )}
 
