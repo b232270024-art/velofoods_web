@@ -136,7 +136,7 @@ ordersRouter.post('/', requireSession, validateBody(createOrderSchema), asyncHan
   } finally {
     client.release();
   }
-});
+}));
 
 // 12 хоногийн зочны сонголтуудаас (болон сонголт бол 1 нэмэлт зүйлээс) захиалга
 // үүсгэнэ. Үнэ болон сонголтын хүчинтэй эсэхийг бүхэлд нь СЕРВЕРТ дахин
@@ -309,7 +309,7 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
   } finally {
     client.release();
   }
-});
+}));
 
 ordersRouter.get('/:id', requireSession, async (req, res) => {
   const order = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
