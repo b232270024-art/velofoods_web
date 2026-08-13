@@ -322,5 +322,5 @@ ordersRouter.get('/:id', requireSession, async (req, res) => {
      ORDER BY oi.plan_date NULLS LAST, oi.plan_meal_time`,
     [req.params.id]
   );
-  res.json({ ...order.rows[0], items: items.rows });
-});
+    res.json({ ...order.rows[0], items: items.rows });
+  });
