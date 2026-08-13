@@ -25,17 +25,21 @@ function toDateStr(date) {
 function fetchLatestUsdRate() {
   const today = toDateStr(new Date());
   const weekAgo = toDateStr(new Date(Date.now() - 8 * 24 * 60 * 60 * 1000));
-  const payload = JSON.stringify({ startDate: weekAgo, endDate: today });
+  // Монголбанкны сайт startDate/endDate-г JSON body-оор биш, query string-ээр
+  // хүлээж авдаг (тэдний own frontend-ийн main.min.js-ээс баталгаажуулсан —
+  // bom.http нь эдгээрийг axios-ийн `params`-аар дамжуулдаг, `data` нь хоосон).
+  // Body-оор илгээвэл сервер огноог огт хүлээж авахгүй тул "Тохирох үр дүн
+  // олдсонгүй" гэсэн хариу өгдөг байсан нь энэ АРГ буруу байсны шалтгаан.
 
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
         hostname: MONGOLBANK_HOST,
-        path: MONGOLBANK_PATH,
+        path: `${MONGOLBANK_PATH}?startDate=${encodeURIComponent(weekAgo)}&endDate=${encodeURIComponent(today)}`,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
+          'Content-Length': 0,
         },
         timeout: 10000,
       },
@@ -71,7 +75,6 @@ function fetchLatestUsdRate() {
 
     req.on('timeout', () => req.destroy(new Error('Монголбанк руу хийсэн хүсэлт хугацаа хэтэрлээ')));
     req.on('error', reject);
-    req.write(payload);
     req.end();
   });
 }

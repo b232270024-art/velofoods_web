@@ -20,19 +20,25 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
-  // DB холболтын алдаа — 503 Service Unavailable
+  // DB холболтын алдаа. Анх 503 (Service Unavailable) ашигладаг байсан ч
+  // Railway/Cloudflare зэрэг edge заримдаа 502/503/504-г "gateway" статус гэж
+  // үзээд origin-ы буцаасан JSON body-г өөрийн HTML алдааны хуудсаар
+  // орлуулдаг — тэгэхээр frontend хариултаа JSON.parse хийж чадахгүй болж,
+  // хэрэглэгчид ямар ч ойлгомжтой алдааны мессеж харагдахгүй болдог байв.
+  // 500 статусыг edge intercept хийдэггүй тул үүнийг ашиглана.
   const isConnErr = err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET' ||
                     err.code === 'ETIMEDOUT' || err.code === 'EPIPE' ||
                     (err.message && (err.message.includes('SSL') ||
                                      err.message.includes('connect ECONNREFUSED') ||
                                      err.message.includes('Connection terminated')));
   if (isConnErr) {
-    return res.status(503).json({
+    return res.status(500).json({
       error: 'Өгөгдлийн санд холбогдоход алдаа гарлаа. Дахин оролдоно уу.',
     });
   }
 
-  res.status(err.status || 500).json({
+  const status = err.status && err.status < 500 ? err.status : 500;
+  res.status(status).json({
     error: 'Серверийн дотоод алдаа гарлаа. Дахин оролдоно уу.',
   });
 }

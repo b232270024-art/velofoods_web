@@ -29,7 +29,12 @@ paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandl
       ({ amount, currency, fxRate } = await convertUsdForHipay(order.rows[0].total_usd));
     } catch (err) {
       req.app.get('logger').error('Hipay-д дүн хөрвүүлэхэд алдаа', { order_id, error: err.message });
-      return res.status(502).json({ error: 'Hipay тохиргоо эсвэл ханш авахад алдаа гарлаа.', details: err.message });
+      // 502/503/504 ашиглахгүй — Railway/Cloudflare зэрэг edge заримдаа эдгээр
+      // "gateway" статустай хариултын JSON body-г өөрийн HTML алдааны
+      // хуудсаар орлуулдаг тул frontend дээр "JSON.parse: unexpected
+      // character" алдаа гарч, бодит алдааны мессеж хэрэглэгчид харагдахгүй
+      // болдог байсан. 500-г edge intercept хийдэггүй тул body баталгаатай хүрнэ.
+      return res.status(500).json({ error: 'Hipay тохиргоо эсвэл ханш авахад алдаа гарлаа.', details: err.message });
     }
 
     logger.info('Hipay checkout эхлүүлж байна', { order_id, amount, currency });
@@ -51,7 +56,7 @@ paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandl
 
     if (!checkout.checkoutId) {
       logger.error('Hipay checkout хариунд checkoutId алга', { order_id, checkout });
-      return res.status(502).json({ error: 'Hipay checkout үүсгэж чадсангүй.', details: checkout.message || checkout.description });
+      return res.status(500).json({ error: 'Hipay checkout үүсгэж чадсангүй.', details: checkout.message || checkout.description });
     }
 
     logger.info('Hipay checkout амжилттай үүслээ', { order_id, checkoutId: checkout.checkoutId });
@@ -82,7 +87,7 @@ paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandl
     const logger = req.app.get('logger');
     logger.error('payments.initiate handler error', { error: err.message, stack: err.stack });
     if (debugApi) {
-      return res.status(err.status || 502).json({ error: err.message, stack: err.stack });
+      return res.status(err.status && err.status < 500 ? err.status : 500).json({ error: err.message, stack: err.stack });
     }
     throw err; // let global errorHandler handle it
   }
