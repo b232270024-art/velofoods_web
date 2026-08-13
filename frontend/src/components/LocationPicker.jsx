@@ -1,72 +1,39 @@
-import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useEffect, useState } from 'react';
+import { Map, Marker, useMap } from '@vis.gl/react-google-maps';
 import { Crosshair, MapPin, Loader2 } from 'lucide-react';
 import { detectCurrentPosition, reverseGeocode } from '../lib/geocode';
 
-const DEFAULT_CENTER = [47.9184, 106.9177]; // Ulaanbaatar
+const DEFAULT_CENTER = { lat: 47.9184, lng: 106.9177 }; // Ulaanbaatar
 
-// Custom pin — avoids Leaflet's default marker image paths breaking under bundlers.
-const pinIcon = L.divIcon({
-  className: 'location-pin-icon',
-  html: `<div style="
-    width:38px;height:38px;border-radius:50% 50% 50% 0;
-    background:#3D7A5A;transform:rotate(-45deg);
-    display:flex;align-items:center;justify-content:center;
-    box-shadow:0 4px 10px rgba(0,0,0,0.35);border:2px solid white;
-  "><div style="width:12px;height:12px;border-radius:50%;background:white"></div></div>`,
-  iconSize: [38, 38],
-  iconAnchor: [19, 36],
-});
+// Дугуй пин — teardrop хэлбэрийн зурагтай харьцуулахад center-anchor нь
+// байгалиараа зөв цэг дээр тохирдог тул google.maps.Point-оор тусгайлан
+// anchor тооцоолох шаардлагагүй (энэ нь module ачаалагдах үед window.google
+// хараахан бэлэн болоогүй байж болзошгүй тул эрсдэлтэй байсан).
+const PIN_ICON_URL = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">' +
+  '<circle cx="15" cy="15" r="12" fill="#3D7A5A" stroke="white" stroke-width="3"/>' +
+  '<circle cx="15" cy="15" r="4" fill="white"/>' +
+  '</svg>'
+);
+
+// <Map>-ийн defaultCenter/defaultZoom нь зөвхөн эхний mount дээр л хэрэглэгддэг
+// (Leaflet-ийн газрын зургийг гараар нэг л удаа init хийдэгтэй адил) тул
+// гаднаас (жишээ нь "Одоогийн байршил илрүүлэх" товч) geo өөрчлөгдөх бүрд
+// газрын зургийг дахин төвлөрүүлэхийн тулд газрын зургийн instance-г
+// useMap()-ээр аваад panTo хийх шаардлагатай.
+function MapRecenter({ geo }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map || !geo) return;
+    map.panTo(geo);
+    map.setZoom(16);
+  }, [map, geo]);
+  return null;
+}
 
 export function LocationPicker({ geo, address, onLocationChange, tr }) {
-  const mapElRef = useRef(null);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
   const [detecting, setDetecting] = useState(false);
   const [status, setStatus] = useState('');
-
-  // ── Init map once ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (mapRef.current) return;
-    const map = L.map(mapElRef.current, {
-      center: geo ? [geo.lat, geo.lng] : DEFAULT_CENTER,
-      zoom: geo ? 16 : 12,
-      attributionControl: false,
-    });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-    }).addTo(map);
-
-    const marker = L.marker(geo ? [geo.lat, geo.lng] : DEFAULT_CENTER, {
-      icon: pinIcon,
-      draggable: true,
-    }).addTo(map);
-
-    marker.on('dragend', async () => {
-      const { lat, lng } = marker.getLatLng();
-      await resolveAndEmit(lat, lng);
-    });
-
-    map.on('click', async (e) => {
-      marker.setLatLng(e.latlng);
-      await resolveAndEmit(e.latlng.lat, e.latlng.lng);
-    });
-
-    mapRef.current = map;
-    markerRef.current = marker;
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!mapRef.current || !markerRef.current || !geo) return;
-    markerRef.current.setLatLng([geo.lat, geo.lng]);
-    mapRef.current.setView([geo.lat, geo.lng], 16, { animate: true });
-  }, [geo]);
 
   const resolveAndEmit = async (lat, lng) => {
     setStatus(tr.locationResolving);
@@ -92,6 +59,8 @@ export function LocationPicker({ geo, address, onLocationChange, tr }) {
       setDetecting(false);
     }
   };
+
+  const markerPosition = geo || DEFAULT_CENTER;
 
   return (
     <div className="card" style={{ padding: '22px 24px', marginBottom: 24 }}>
@@ -125,14 +94,37 @@ export function LocationPicker({ geo, address, onLocationChange, tr }) {
       </p>
 
       <div
-        ref={mapElRef}
         id="location-map"
         style={{
           width: '100%', height: 260, borderRadius: 'var(--r-md)',
           overflow: 'hidden', border: '1px solid var(--border)',
           marginBottom: 14,
         }}
-      />
+      >
+        <Map
+          defaultCenter={markerPosition}
+          defaultZoom={geo ? 16 : 12}
+          gestureHandling="greedy"
+          disableDefaultUI
+          zoomControl
+          style={{ width: '100%', height: '100%' }}
+          onClick={(e) => {
+            if (!e.detail.latLng) return;
+            resolveAndEmit(e.detail.latLng.lat, e.detail.latLng.lng);
+          }}
+        >
+          <MapRecenter geo={geo} />
+          <Marker
+            position={markerPosition}
+            draggable
+            icon={PIN_ICON_URL}
+            onDragEnd={(e) => {
+              if (!e.latLng) return;
+              resolveAndEmit(e.latLng.lat(), e.latLng.lng());
+            }}
+          />
+        </Map>
+      </div>
 
       {status && (
         <p style={{ fontSize: '0.78rem', color: 'var(--brand-green-btn)', fontWeight: 600, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 4 }}>

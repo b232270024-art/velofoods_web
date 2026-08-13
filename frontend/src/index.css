@@ -493,11 +493,6 @@ img {
   animation: spin 1s linear infinite;
 }
 
-/* Leaflet map — keep our own radius/border, drop default Leaflet chrome */
-.leaflet-container {
-  font-family: 'Inter', sans-serif;
-}
-
 /* =============================
    CUSTOM CHECKBOX
    ============================= */
