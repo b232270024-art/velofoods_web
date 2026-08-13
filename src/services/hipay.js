@@ -70,14 +70,28 @@ function hipayRequest(method, pathname, { query, body } = {}) {
 // (exchangeRate.js) — ханш авч чадахгүй бол мөн адил fail fast зарчмаар
 // төлбөрийг эхлүүлэхгүй.
 export async function convertUsdForHipay(amountUsd) {
-  const currency = requiredEnv('HIPAY_CURRENCY');
+  // Be tolerant in production: if HIPAY_CURRENCY isn't configured, default
+  // to USD to avoid failing payment initiation entirely. For MNT we try to
+  // fetch the official rate from Mongolbank; if that fails and an explicit
+  // HIPAY_USD_TO_MNT_RATE env var is provided, use it as a fallback.
+  const currency = process.env.HIPAY_CURRENCY || 'USD';
 
   if (currency === 'USD') {
     return { amount: Number(amountUsd), currency, fxRate: 1 };
   }
   if (currency === 'MNT') {
-    const rate = await getUsdToMntRate();
-    return { amount: Math.round(Number(amountUsd) * rate), currency, fxRate: rate };
+    try {
+      const rate = await getUsdToMntRate();
+      return { amount: Math.round(Number(amountUsd) * rate), currency, fxRate: rate };
+    } catch (err) {
+      const fallback = process.env.HIPAY_USD_TO_MNT_RATE ? Number(process.env.HIPAY_USD_TO_MNT_RATE) : null;
+      if (fallback && Number.isFinite(fallback) && fallback > 0) {
+        console.warn('Монголбанк ханш авч чадсангүй, орлуулагч env HIPAY_USD_TO_MNT_RATE ашиглаж байна', err.message);
+        return { amount: Math.round(Number(amountUsd) * fallback), currency: 'MNT', fxRate: fallback };
+      }
+      // If we cannot determine a safe MNT rate, fail so we don't charge wrong amount.
+      throw new Error(`Монголбанкнаас USD->MNT ханш авч чадсангүй: ${err.message}`);
+    }
   }
   throw new Error(`HIPAY_CURRENCY утга дэмжигдэхгүй байна: ${currency} (зөвхөн 'USD' эсвэл 'MNT')`);
 }
