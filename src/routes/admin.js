@@ -322,23 +322,24 @@ adminRouter.delete('/plan-items/:id', asyncHandler(async (req, res) => {
   res.json({ deleted: true, id: req.params.id });
 }));
 
-// --- 12 хоногийн идэвхтэй эргэлт (Тохиргоо хуудаснаас өөрчилнө) -----------
+// --- Хоолны захиалгын идэвхтэй эргэлт (Тохиргоо хуудаснаас өөрчилнө) -----------
 adminRouter.get('/plan-cycle', asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT to_char(start_date, 'YYYY-MM-DD') AS start_date,
-            to_char(start_date + interval '11 days', 'YYYY-MM-DD') AS end_date
+            to_char(end_date, 'YYYY-MM-DD') AS end_date
      FROM twelve_day_cycle_settings WHERE id = true`
   );
-  if (rows.length === 0) return res.status(404).json({ error: '12 хоногийн эргэлт тохируулагдаагүй байна.' });
+  if (rows.length === 0) return res.status(404).json({ error: 'Хоолны захиалгын эргэлт тохируулагдаагүй байна.' });
   res.json(rows[0]);
 }));
 
 adminRouter.patch('/plan-cycle', validateBody(updatePlanCycleSchema), asyncHandler(async (req, res) => {
+  const { start_date, end_date } = req.body;
   const { rows } = await pool.query(
-    `UPDATE twelve_day_cycle_settings SET start_date = $1, updated_at = now() WHERE id = true
+    `UPDATE twelve_day_cycle_settings SET start_date = $1, end_date = $2, updated_at = now() WHERE id = true
      RETURNING to_char(start_date, 'YYYY-MM-DD') AS start_date,
-               to_char(start_date + interval '11 days', 'YYYY-MM-DD') AS end_date`,
-    [req.body.start_date]
+               to_char(end_date, 'YYYY-MM-DD') AS end_date`,
+    [start_date, end_date]
   );
   res.json(rows[0]);
 }));

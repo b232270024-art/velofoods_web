@@ -31,12 +31,20 @@ export async function getUbToday() {
   return rows[0].today;
 }
 
-export async function getCycleStartDate() {
+export async function getCycleDates() {
   const { rows } = await pool.query(
-    `SELECT to_char(start_date, 'YYYY-MM-DD') AS start_date FROM twelve_day_cycle_settings WHERE id = true`
+    `SELECT to_char(start_date, 'YYYY-MM-DD') AS start_date,
+            to_char(end_date, 'YYYY-MM-DD') AS end_date
+     FROM twelve_day_cycle_settings WHERE id = true`
   );
-  if (rows.length === 0) throw new Error('12 хоногийн эргэлт тохируулагдаагүй байна.');
-  return rows[0].start_date;
+  if (rows.length === 0) throw new Error('Хоолны захиалгын эргэлт тохируулагдаагүй байна.');
+  return { startDate: rows[0].start_date, endDate: rows[0].end_date };
+}
+
+// Backward compat alias
+export async function getCycleStartDate() {
+  const { startDate } = await getCycleDates();
+  return startDate;
 }
 
 // { available, cycleStartDate, firstAvailableDate, endDate, dayCount }
@@ -45,8 +53,7 @@ export async function getCycleStartDate() {
 // огноогоор эхэлнэ (жишээ нь эргэлт 8.17-нд эхлэх бол 8.16-нд захиалсан зочин
 // 8.17-оос буюу бүтэн 12 хоногийг авна).
 export async function resolvePlanWindow() {
-  const [today, cycleStartDate] = await Promise.all([getUbToday(), getCycleStartDate()]);
-  const endDate = addDays(cycleStartDate, 11);
+  const [today, { startDate: cycleStartDate, endDate }] = await Promise.all([getUbToday(), getCycleDates()]);
   const tomorrow = addDays(today, 1);
   const firstAvailableDate = tomorrow > cycleStartDate ? tomorrow : cycleStartDate;
 

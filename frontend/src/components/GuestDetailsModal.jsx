@@ -85,12 +85,12 @@ export function GuestDetailsModal({ isOpen, tr, deliveryType, onSubmit, onClose 
         )}
 
         <div style={{
-          width: 56, height: 56, borderRadius: 16,
-          background: 'linear-gradient(135deg, #3D7A5A, #1A3C34)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 72, height: 72, borderRadius: 16,
+          overflow: 'hidden',
           margin: '0 auto 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Hotel size={26} color="white" />
+          <img src="/velofoods.jpeg" alt="Velofoods" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
 
         <h2 style={{

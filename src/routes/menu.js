@@ -52,15 +52,15 @@ menuRouter.get('/plan', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
-// GET /api/menu/plan-cycle — идэвхтэй 12 хоногийн эргэлтийн эхлэх/дуусах огноо.
+// GET /api/menu/plan-cycle — идэвхтэй хоолны захиалгын эргэлтийн эхлэх/дуусах огноо.
 // Auth шаардахгүй — зочны PlanPreview болон admin Тохиргоо хуудас хоёулаа ашиглана.
 menuRouter.get('/plan-cycle', asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT to_char(start_date, 'YYYY-MM-DD') AS start_date,
-            to_char(start_date + interval '11 days', 'YYYY-MM-DD') AS end_date
+            to_char(end_date, 'YYYY-MM-DD') AS end_date
      FROM twelve_day_cycle_settings WHERE id = true`
   );
-  if (rows.length === 0) return res.status(404).json({ error: '12 хоногийн эргэлт тохируулагдаагүй байна.' });
+  if (rows.length === 0) return res.status(404).json({ error: 'Хоолны захиалгын эргэлт тохируулагдаагүй байна.' });
   res.json(rows[0]);
 }));
 

@@ -129,7 +129,7 @@ export const updateOrderStatusSchema = z.object({
 });
 
 export const createPlanItemSchema = z.object({
-  day_number: z.number().int().min(1, 'Өдөр 1-12 хооронд байх ёстой').max(12, 'Өдөр 1-12 хооронд байх ёстой'),
+  day_number: z.number().int().min(1, 'Өдөр 1-ээс их байх ёстой'),
   meal_time: z.enum(['morning', 'lunch', 'evening'], { message: 'meal_time нь morning/lunch/evening байх ёстой' }),
   menu_item_id: uuidSchema('menu_item_id зөв UUID байх ёстой'),
 });
@@ -154,6 +154,10 @@ export const createPlanOrderSchema = z.object({
 
 export const updatePlanCycleSchema = z.object({
   start_date: dateStringSchema,
+  end_date: dateStringSchema,
+}).refine(data => data.end_date >= data.start_date, {
+  message: 'end_date нь start_date-ээс хожуу байх ёстой',
+  path: ['end_date'],
 });
 
 export const adminLoginSchema = z.object({
