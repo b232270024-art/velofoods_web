@@ -114,7 +114,7 @@ export const createOrderSchema = z.object({
     .array(
       z.object({
         menu_item_id: uuidSchema('menu_item_id зөв UUID байх ёстой'),
-        quantity: z.number().int().positive('Тоо ширхэг 0-ээс их бүхэл тоо байх ёстой'),
+        quantity: z.number().int().positive('Тоо ширхэг 0-ээс их бүхэл тоо байх ёстой').max(100, 'Нэг захиалгаар хамгийн ихдээ 100 ширхэг авах боломжтой'),
         guest_name: z.string().trim().min(1).max(100).nullish(),
       })
     )
@@ -129,7 +129,7 @@ export const updateOrderStatusSchema = z.object({
 });
 
 export const createPlanItemSchema = z.object({
-  day_number: z.number().int().min(1, 'Өдөр 1-ээс их байх ёстой'),
+  day_number: z.number().int().min(1, 'Өдөр 1-ээс их байх ёстой').max(365, 'Өдөр 365-аас бага байх ёстой'),
   meal_time: z.enum(['morning', 'lunch', 'evening'], { message: 'meal_time нь morning/lunch/evening байх ёстой' }),
   menu_item_id: uuidSchema('menu_item_id зөв UUID байх ёстой'),
 });
@@ -148,7 +148,8 @@ export const createPlanOrderSchema = z.object({
         menu_item_id: uuidSchema('menu_item_id зөв UUID байх ёстой'),
       })
     )
-    .min(1, 'Дор хаяж нэг сонголт байх ёстой'),
+    .min(1, 'Дор хаяж нэг сонголт байх ёстой')
+    .max(200, 'Сонголтын тоо хэтэрхий их байна'),
   addon_menu_item_id: uuidSchema('addon_menu_item_id зөв UUID байх ёстой').nullish(),
 });
 

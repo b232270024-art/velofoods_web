@@ -173,6 +173,11 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
     return res.status(400).json({ error: 'Захиалга хийх хамгийн эрт боломжтой огнооноос өмнө байна.' });
   }
 
+  const { diffDays } = await import('../services/twelveDayPlan.js');
+  if (diffDays(startDateStr, endDateStr) > 60) {
+    return res.status(400).json({ error: 'Захиалгын үргэлжлэх хугацаа хэт урт байна (дээд тал нь 60 өдөр).' });
+  }
+
   // Get max day number from DB for this diet type to know how to modulo
   const maxDayRes = await pool.query(
     `SELECT COALESCE(MAX(day_number), 0)::int as max_day 
@@ -190,7 +195,6 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
     expectedDates.push(dt.toISOString().slice(0, 10));
   }
   
-  const { diffDays } = await import('../services/twelveDayPlan.js');
   const dayNumberToDate = {};
   const queryDayNumbers = [];
   

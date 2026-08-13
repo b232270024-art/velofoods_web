@@ -390,13 +390,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
   return (
     <div className="anim-fade-up" style={{ maxWidth: 900, margin: '0 auto', padding: '40px 0 140px' }}>
       <BackButton label={tr.back} onBack={onBack} />
-      {/* Date range selector */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
-        <label style={{ fontSize: '0.85rem', color: 'var(--text-body)' }}>{tr.startDateLabel || 'Start Date'}:</label>
-        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={{ padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 'var(--r-full)' }} />
-        <label style={{ fontSize: '0.85rem', color: 'var(--text-body)' }}>{tr.endDateLabel || 'End Date'}:</label>
-        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} style={{ padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 'var(--r-full)' }} />
-      </div>
+      {/* The date range selector has been moved below */}
       <h2 className="heading-lg" style={{ marginBottom: 8 }}>{tr.menuPlanTitle}</h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: 16 }}>{tr.menuPlanSubtitle}</p>
 
@@ -407,6 +401,19 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
         <Info size={17} color="var(--brand-green-light)" style={{ flexShrink: 0, marginTop: 1 }} />
         <p style={{ fontSize: '0.83rem', color: 'var(--text-body)', lineHeight: 1.55 }}>{tr.menuPlanInfoNote}</p>
       </div>
+
+      {data?.available && (
+        <InlineDateRangePicker 
+          startDate={startDate} 
+          endDate={endDate} 
+          minDate={data.start_date}
+          onSelectRange={(start, end) => {
+            setStartDate(start);
+            setEndDate(end);
+          }}
+        />
+      )}
+
 
       {loading && <p style={{ color: 'var(--text-muted)' }}>{tr.loading || 'Loading...'}</p>}
 
