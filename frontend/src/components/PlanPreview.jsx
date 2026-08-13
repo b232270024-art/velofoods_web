@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Utensils, RefreshCcw, AlertTriangle, Info, Check, Sunrise, Sun, Moon } from 'lucide-react';
+import { InlineDateRangePicker } from './InlineDateRangePicker';
 
 const MEAL_KEYS = ['morning', 'lunch', 'evening'];
 
