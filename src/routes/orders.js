@@ -162,12 +162,45 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
     return res.status(400).json({ error: 'Одоогоор идэвхтэй 12 хоногийн эргэлт байхгүй байна.' });
   }
 
-  // Тухайн зочинд харагдах ёстой (огноо × цаг × АНГИЛАЛ) слотуудыг нэг query-ээр
-  // серверт дахин тооцоолно — admin аль өдөр/цагт ямар ангиллын хоол тохируулсан
-  // нь хувьсах тул (жишээ нь Main Course + Soup) слотын тоо ч хувьсах ёстой.
-  const expectedDates = enumerateDates(window.firstAvailableDate, window.endDate);
-  const dayNumbers = [...new Set(expectedDates.map(d => dateToDayNumber(d, window.cycleStartDate)))];
-  const dayNumberToDate = Object.fromEntries(expectedDates.map(d => [dateToDayNumber(d, window.cycleStartDate), d]));
+  const uniqueDates = [...new Set(selections.map(s => s.plan_date))].sort();
+  if (uniqueDates.length === 0) {
+    return res.status(400).json({ error: 'Сонголт олдсонгүй.' });
+  }
+  const startDateStr = uniqueDates[0];
+  const endDateStr = uniqueDates[uniqueDates.length - 1];
+  
+  if (startDateStr < window.firstAvailableDate) {
+    return res.status(400).json({ error: 'Захиалга хийх хамгийн эрт боломжтой огнооноос өмнө байна.' });
+  }
+
+  // Get max day number from DB for this diet type to know how to modulo
+  const maxDayRes = await pool.query(
+    `SELECT COALESCE(MAX(day_number), 0)::int as max_day 
+     FROM twelve_day_plan_items pi
+     JOIN menu_items mi ON mi.id = pi.menu_item_id
+     WHERE mi.diet_type_id = $1 AND mi.is_deleted = false`,
+    [session.diet_type_id]
+  );
+  const maxDayNum = maxDayRes.rows[0].max_day || 12;
+
+  const expectedDates = [];
+  const startDt = new Date(startDateStr);
+  const endDt = new Date(endDateStr);
+  for (let dt = startDt; dt <= endDt; dt.setUTCDate(dt.getUTCDate() + 1)) {
+    expectedDates.push(dt.toISOString().slice(0, 10));
+  }
+  
+  const { diffDays } = await import('../services/twelveDayPlan.js');
+  const dayNumberToDate = {};
+  const queryDayNumbers = [];
+  
+  for (const date of expectedDates) {
+    const diff = diffDays(startDateStr, date);
+    const dayNum = (diff % maxDayNum) + 1;
+    dayNumberToDate[dayNum] = dayNumberToDate[dayNum] || [];
+    dayNumberToDate[dayNum].push(date);
+    if (!queryDayNumbers.includes(dayNum)) queryDayNumbers.push(dayNum);
+  }
 
   const configured = await pool.query(
     `SELECT pi.day_number, pi.meal_time, COALESCE(mi.category, '') AS category,
@@ -175,21 +208,20 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
      FROM twelve_day_plan_items pi
      JOIN menu_items mi ON mi.id = pi.menu_item_id
      WHERE pi.day_number = ANY($1::int[]) AND mi.diet_type_id = $2 AND mi.is_deleted = false`,
-    [dayNumbers, session.diet_type_id]
+    [queryDayNumbers, session.diet_type_id]
   );
 
-  // "date|meal" -> Map(menu_item_id -> { category, price }); мөн бүх боломжит
-  // (date|meal|category) багц (bucket)-уудыг цуглуулна — сонголт бүр яг нэг
-  // багцад унах ёстой, багц бүрт яг нэг сонголт байх ёстой.
+  // "date|meal" -> Map(menu_item_id -> { category, price }); 
   const optionsByDateMeal = new Map();
   const expectedBucketKeys = new Set();
   for (const row of configured.rows) {
-    const date = dayNumberToDate[row.day_number];
-    if (!date) continue;
-    const dmKey = `${date}|${row.meal_time}`;
-    if (!optionsByDateMeal.has(dmKey)) optionsByDateMeal.set(dmKey, new Map());
-    optionsByDateMeal.get(dmKey).set(row.menu_item_id, { category: row.category, price: Number(row.price_usd) });
-    expectedBucketKeys.add(`${dmKey}|${row.category}`);
+    const datesForDay = dayNumberToDate[row.day_number] || [];
+    for (const date of datesForDay) {
+      const dmKey = `${date}|${row.meal_time}`;
+      if (!optionsByDateMeal.has(dmKey)) optionsByDateMeal.set(dmKey, new Map());
+      optionsByDateMeal.get(dmKey).set(row.menu_item_id, { category: row.category, price: Number(row.price_usd) });
+      expectedBucketKeys.add(`${dmKey}|${row.category}`);
+    }
   }
 
   if (selections.length !== expectedBucketKeys.size) {
@@ -238,7 +270,7 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
     const orderRes = await insertOrder(client, (orderNumber) => client.query(
       `INSERT INTO orders (session_id, status, total_usd, plan_start_date, plan_end_date, plan_day_count, order_number)
        VALUES ($1, 'pending', $2, $3, $4, $5, $6) RETURNING id`,
-      [session_id, total, window.firstAvailableDate, window.endDate, window.dayCount, orderNumber]
+      [session_id, total, startDateStr, endDateStr, expectedDates.length, orderNumber]
     ));
     const orderId = orderRes.rows[0].id;
 
@@ -254,7 +286,7 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
       await client.query(
         `INSERT INTO order_items (order_id, menu_item_id, guest_name, quantity, unit_price_usd, plan_date, plan_meal_time, is_addon)
          VALUES ($1, $2, $3, 1, $4, $5, NULL, true)`,
-        [orderId, addon_menu_item_id, session.guest_name, addonUnitPrice, window.firstAvailableDate]
+        [orderId, addon_menu_item_id, session.guest_name, addonUnitPrice, startDateStr]
       );
     }
 

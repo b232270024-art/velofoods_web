@@ -53,15 +53,11 @@ export async function getCycleStartDate() {
 // огноогоор эхэлнэ (жишээ нь эргэлт 8.17-нд эхлэх бол 8.16-нд захиалсан зочин
 // 8.17-оос буюу бүтэн 12 хоногийг авна).
 export async function resolvePlanWindow() {
-  const [today, { startDate: cycleStartDate, endDate }] = await Promise.all([getUbToday(), getCycleDates()]);
+  const today = await getUbToday();
   const tomorrow = addDays(today, 1);
-  const firstAvailableDate = tomorrow > cycleStartDate ? tomorrow : cycleStartDate;
+  const firstAvailableDate = tomorrow; // User can always order starting from tomorrow
 
-  if (firstAvailableDate > endDate) {
-    return { available: false, cycleStartDate, firstAvailableDate: null, endDate, dayCount: 0 };
-  }
-  const dayCount = diffDays(firstAvailableDate, endDate) + 1;
-  return { available: true, cycleStartDate, firstAvailableDate, endDate, dayCount };
+  return { available: true, firstAvailableDate };
 }
 
 export function dateToDayNumber(dateStr, cycleStartDate) {

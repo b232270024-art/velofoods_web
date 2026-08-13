@@ -102,25 +102,22 @@ export function PlanManager() {
   const [saving, setSaving] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
 
-  // Cycle огнооны state
-  const [cycleStartDate, setCycleStartDate] = useState('');
-  const [cycleEndDate, setCycleEndDate] = useState('');
-  const [cycleSaving, setCycleSaving] = useState(false);
-  const [cycleError, setCycleError] = useState('');
-
-  // Динамик өдрийн тоо — end_date - start_date + 1
-  const dayCount = useMemo(() => countDays(cycleStartDate, cycleEndDate), [cycleStartDate, cycleEndDate]);
+  // Динамик өдрийн тоо — DB дэх хамгийн их өдөр + хэрэглэгчийн нэмсэн өдрүүд
+  const [extraDays, setExtraDays] = useState(0);
+  const maxDayInDb = useMemo(() => {
+    if (planItems.length === 0) return 12;
+    return Math.max(12, ...planItems.map(p => p.day_number));
+  }, [planItems]);
+  const dayCount = maxDayInDb + extraDays;
   const dayNumbers = useMemo(() => Array.from({ length: dayCount }, (_, i) => i + 1), [dayCount]);
 
   useEffect(() => {
     Promise.all([
       fetch('/api/menu/restaurants').then(r => r.json()),
       fetch('/api/menu/diet-types').then(r => r.json()),
-      fetch('/api/admin/plan-cycle').then(r => r.json()),
-    ]).then(([r, d, cycle]) => {
+    ]).then(([r, d]) => {
       if (Array.isArray(r)) { setRestaurants(r); setSelectedRestaurantId(prev => prev ?? r[0]?.id ?? null); }
       if (Array.isArray(d)) setDietTypes(d);
-      if (cycle?.start_date) { setCycleStartDate(cycle.start_date); setCycleEndDate(cycle.end_date || ''); }
     }).catch(() => setError('Мэдээлэл татахад алдаа гарлаа.'));
   }, []);
 
@@ -142,26 +139,7 @@ export function PlanManager() {
 
   useEffect(() => { fetchPlanData(); }, [fetchPlanData]);
 
-  // Cycle огноо хадгалах
-  const saveCycle = async () => {
-    if (!cycleStartDate || !cycleEndDate) { setCycleError('Эхлэх болон дуусах огноо оруулна уу.'); return; }
-    if (cycleEndDate < cycleStartDate) { setCycleError('Дуусах огноо эхлэх огнооноос хожуу байх ёстой.'); return; }
-    setCycleSaving(true); setCycleError('');
-    try {
-      const res = await fetch('/api/admin/plan-cycle', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ start_date: cycleStartDate, end_date: cycleEndDate }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Огноо хадгалахад алдаа гарлаа.');
-      setCycleStartDate(data.start_date);
-      setCycleEndDate(data.end_date);
-      setSavedToast(true);
-      setTimeout(() => setSavedToast(false), 2500);
-    } catch (err) { setCycleError(err.message); }
-    finally { setCycleSaving(false); }
-  };
+
 
   const activeRestaurant = restaurants.find(r => r.id === selectedRestaurantId);
 
@@ -220,32 +198,7 @@ export function PlanManager() {
         Ресторан тус бүр өөрийн хоолны планаа — доороос ресторанаа сонгоод өдөр тус бүрийн өглөө/өдөр/оройн хоолыг тохируулна.
       </p>
 
-      {/* ── Cycle огнооны тохиргоо ───────────────────────────────────── */}
-      <div className="card" style={{ padding: '18px 20px', marginBottom: 24, background: 'var(--bg-muted)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <CalendarDays size={18} color="var(--brand-green)" />
-          <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-dark)' }}>Хүргэлтийн хугацааны тохиргоо</span>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
-          <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Эхлэх огноо</label>
-            <input type="date" value={cycleStartDate} onChange={e => setCycleStartDate(e.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: '0.85rem', background: 'var(--bg-card)' }} />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Дуусах огноо</label>
-            <input type="date" value={cycleEndDate} onChange={e => setCycleEndDate(e.target.value)}
-              style={{ padding: '8px 10px', borderRadius: 8, border: '1.5px solid var(--border)', fontSize: '0.85rem', background: 'var(--bg-card)' }} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)' }}>Нийт өдөр: <strong style={{ color: 'var(--brand-green)' }}>{dayCount}</strong></span>
-            <button onClick={saveCycle} disabled={cycleSaving} className="btn-primary" style={{ padding: '8px 18px', fontSize: '0.82rem' }}>
-              {cycleSaving ? 'Хадгалж байна...' : 'Огноо хадгалах'}
-            </button>
-          </div>
-        </div>
-        {cycleError && <p style={{ fontSize: '0.8rem', color: '#dc2626', marginTop: 8 }}>{cycleError}</p>}
-      </div>
+
 
       {error && <div style={{ background: '#fef2f2', color: '#991b1b', padding: '10px 14px', borderRadius: 10, fontSize: '0.85rem', marginBottom: 16 }}>{error}</div>}
 
@@ -279,13 +232,15 @@ export function PlanManager() {
             color: selectedDay === day ? '#fff' : 'var(--text-body)',
           }}>
             <span>{day}</span>
-            {cycleStartDate && (
-              <span style={{ fontSize: '0.62rem', fontWeight: 600, opacity: 0.8 }}>
-                {dayNumberToLabel(day, cycleStartDate)}
-              </span>
-            )}
           </button>
         ))}
+        <button onClick={() => setExtraDays(prev => prev + 1)} style={{
+            width: 52, height: 48, borderRadius: 10, fontWeight: 800, fontSize: '0.88rem',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+            background: 'var(--bg-muted)', color: 'var(--text-muted)', border: '1px dashed var(--border)',
+          }}>
+            <Plus size={16} />
+        </button>
       </div>
 
       {/* Meal sections */}

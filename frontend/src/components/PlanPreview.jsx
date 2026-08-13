@@ -265,21 +265,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
   const [selections, setSelections] = useState({}); // { [date]: { [mealKey]: { [category]: menu_item_id } } }
   const [activeDate, setActiveDate] = useState(null);
   const [addonId, setAddonId] = useState(null);
-  // New UI state for admin to add extra day (client‑side placeholder)
-  const addExtraDay = (newDate) => {
-    if (!data?.days) return;
-    // Avoid duplicate dates
-    if (data.days.some(d => d.date === newDate)) return;
-    const emptyDay = {
-      date: newDate,
-      meals: {},
-    };
-    setData(prev => ({
-      ...prev,
-      days: [...prev.days, emptyDay].sort((a, b) => a.date.localeCompare(b.date)),
-      day_count: (prev.day_count || 0) + 1,
-    }));
-  };
+
   // New state for user-selected date range
   const [startDate, setStartDate] = useState(''); // YYYY-MM-DD
   const [endDate, setEndDate] = useState(''); // YYYY-MM-DD
@@ -291,18 +277,11 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
       .then(json => {
         setData(json);
         if (json.available) {
-          const init = {};
-          for (const day of json.days) {
-            init[day.date] = {};
-            for (const meal of MEAL_KEYS) {
-              init[day.date][meal] = {};
-              for (const [category, options] of Object.entries(day.meals[meal] || {})) {
-                init[day.date][meal][category] = options[0]?.menu_item_id ?? null;
-              }
-            }
-          }
-          setSelections(init);
-          setActiveDate(json.days[0]?.date ?? null);
+          setStartDate(json.start_date);
+          // Default to 12 days for convenience
+          const ed = new Date(json.start_date);
+          ed.setUTCDate(ed.getUTCDate() + 11);
+          setEndDate(ed.toISOString().slice(0, 10));
         }
         setError('');
       })
@@ -322,16 +301,59 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
 
   const addonItem = addonId ? menuItems.find(i => i.id === addonId) : null;
 
+  // Generate dynamic days array based on startDate and endDate
+  const dynamicDays = useMemo(() => {
+    if (!data?.template_days || !startDate || !endDate) return [];
+    if (endDate < startDate) return [];
+    const sy = parseInt(startDate.slice(0, 4)), sm = parseInt(startDate.slice(5, 7)), sd = parseInt(startDate.slice(8, 10));
+    const ey = parseInt(endDate.slice(0, 4)), em = parseInt(endDate.slice(5, 7)), ed = parseInt(endDate.slice(8, 10));
+    const s = Date.UTC(sy, sm - 1, sd);
+    const e = Date.UTC(ey, em - 1, ed);
+    const count = Math.max(0, Math.round((e - s) / 86400000)) + 1;
+    
+    const maxDayNum = data.template_days.length;
+    if (maxDayNum === 0) return [];
+
+    const daysArr = [];
+    for (let i = 0; i < count; i++) {
+      const dt = new Date(Date.UTC(sy, sm - 1, sd + i));
+      const dateStr = dt.toISOString().slice(0, 10);
+      // Map to template day_number (1-indexed, loops if user selects more days than admin defined)
+      const dayNum = (i % maxDayNum) + 1;
+      const template = data.template_days.find(td => td.day_number === dayNum) || { meals: {} };
+      daysArr.push({ date: dateStr, day_number: dayNum, meals: template.meals });
+    }
+    return daysArr;
+  }, [data, startDate, endDate]);
+
+  // Re-initialize selections if dates or template change
+  useEffect(() => {
+    if (dynamicDays.length > 0) {
+      setSelections(prev => {
+        const init = { ...prev };
+        for (const day of dynamicDays) {
+          if (!init[day.date]) {
+            init[day.date] = {};
+            for (const meal of MEAL_KEYS) {
+              init[day.date][meal] = {};
+              for (const [category, options] of Object.entries(day.meals[meal] || {})) {
+                init[day.date][meal][category] = options[0]?.menu_item_id ?? null;
+              }
+            }
+          }
+        }
+        return init;
+      });
+      if (!activeDate || !dynamicDays.find(d => d.date === activeDate)) {
+        setActiveDate(dynamicDays[0]?.date ?? null);
+      }
+    }
+  }, [dynamicDays]);
+
   const total = useMemo(() => {
-    if (!data?.days) return 0;
+    if (!dynamicDays.length) return 0;
     let sum = 0;
-    // Determine which days are within the selected range
-    const relevantDays = data.days.filter(d => {
-      if (startDate && d.date < startDate) return false;
-      if (endDate && d.date > endDate) return false;
-      return true;
-    });
-    for (const day of relevantDays) {
+    for (const day of dynamicDays) {
       for (const meal of MEAL_KEYS) {
         for (const [category, options] of Object.entries(day.meals[meal] || {})) {
           const selectedId = selections[day.date]?.[meal]?.[category];
@@ -342,13 +364,13 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
     }
     if (addonItem) sum += Number(addonItem.price_usd);
     return sum;
-  }, [data, selections, addonItem, startDate, endDate]);
+  }, [dynamicDays, selections, addonItem]);
 
   const handleConfirm = () => {
-    if (!data?.available) return;
+    if (!data?.available || dynamicDays.length === 0) return;
     const flatSelections = [];
     const reviewItems = [];
-    for (const day of data.days) {
+    for (const day of dynamicDays) {
       for (const meal of MEAL_KEYS) {
         for (const [category, options] of Object.entries(day.meals[meal] || {})) {
           const selectedId = selections[day.date]?.[meal]?.[category] ?? options[0]?.menu_item_id;
@@ -363,7 +385,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
   };
 
   const mealLabels = getMealLabel(tr);
-  const activeDay = data?.days?.find(d => d.date === activeDate);
+  const activeDay = dynamicDays.find(d => d.date === activeDate);
 
   return (
     <div className="anim-fade-up" style={{ maxWidth: 900, margin: '0 auto', padding: '40px 0 140px' }}>
@@ -407,14 +429,10 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
       {!loading && data?.available && (
         <>
           {(() => {
-            const filtered = data.days.filter(d => {
-              if (startDate && d.date < startDate) return false;
-              if (endDate && d.date > endDate) return false;
-              return true;
-            });
-            const dates = filtered.map(d => d.date);
+            if (dynamicDays.length === 0) return <p style={{ color: 'var(--text-muted)' }}>{tr.menuPlanUnavailable || 'No days available for this date range.'}</p>;
+            const dates = dynamicDays.map(d => d.date);
             const active = dates.includes(activeDate) ? activeDate : dates[0];
-            const currentDay = filtered.find(d => d.date === active);
+            const currentDay = dynamicDays.find(d => d.date === active);
             if (!currentDay) return null;
             return (
               <>
@@ -455,17 +473,10 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
           <div style={{ display: 'flex', flexDirection: 'row', maxWidth: 900, width: '100%', margin: '0 auto', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
-                {data.day_count} {tr.menuPlanDaysLabel || 'days'}{addonItem ? ' + 1' : ''}
+                {dynamicDays.length} {tr.menuPlanDaysLabel || 'days'}{addonItem ? ' + 1' : ''}
               </div>
               <div style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--brand-green)' }}>${total.toFixed(2)}</div>
             </div>
-            {/* Admin: Add extra day button (client‑side only) */}
-            <button onClick={() => {
-              const newDate = prompt('Enter new day (YYYY-MM-DD)');
-              if (newDate) addExtraDay(newDate);
-            }} style={{ padding: '8px 16px', borderRadius: 8, background: 'var(--brand-green)', color: '#fff', marginRight: 8 }}>
-              {tr.addDayBtn || 'Add Day'}
-            </button>
             <button id="confirm-plan-btn" className="btn-primary" onClick={handleConfirm} style={{ padding: '14px 32px', borderRadius: 14 }}>
               {tr.menuPlanConfirm}
             </button>

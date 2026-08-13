@@ -60,11 +60,11 @@ export const t = {
     // Order Type
     orderTypeTitle: 'Select an order type',
     orderTypeP1: 'All orders are prepared fresh and delivered the next day. Please place your order by today to receive it tomorrow — orders placed today will not be delivered same-day.',
-    orderTypeP2: 'Subscribe to our 12-Day Meal Plan and get Breakfast, Lunch, and Dinner delivered fresh every day — convenient, healthy, and stress-free.',
+    orderTypeP2: 'Subscribe to our Meal Plan and get Breakfast, Lunch, and Dinner delivered fresh every day — convenient, healthy, and stress-free.',
     orderTypeClick: 'Click an order type',
-    orderType12: '12-Day Meal Plan\nSubscription',
+    orderType12: 'Subscription\nMeal Plan',
     orderTypeOne: 'One time',
-    orderType12Check1: '12 Days of Meals',
+    orderType12Check1: 'Flexible Meal Subscription',
     orderType12Check2: 'Breakfast, Lunch & Dinner Included',
     orderType12Check3: 'Fresh, Daily Delivery',
     orderType12Check4: 'One Subscription, Zero Hassle',
@@ -77,9 +77,9 @@ export const t = {
 
     // Diet Type Selection (12-day plan)
     dietTypeSelectTitle: 'Choose your menu',
-    dietTypeSelectDesc: 'Each 12-Day Meal Plan is prepared by a dedicated kitchen. Pick the one that matches your dietary needs.',
+    dietTypeSelectDesc: 'Each Meal Plan is prepared by a dedicated kitchen. Pick the one that matches your dietary needs.',
     dietTypeSelectBtn: 'Continue',
-    dietTypeSelectedMsg: "'s 12-Day Meal Plan is ready to view.",
+    dietTypeSelectedMsg: "'s Meal Plan is ready to view.",
 
     // Menu sold out & meal time labels
     menuSoldOut: 'Sold Out',
@@ -121,11 +121,11 @@ export const t = {
     menuEmptySub: 'Try a different search or category',
     menuAdd: 'Add',
     menuAdded: 'In Cart',
-    menuPlanTitle: '12-Day Meal Plan',
+    menuPlanTitle: 'Subscription Meal Plan',
     menuPlanSubtitle: 'Your subscription includes:',
     menuPlanConfirm: 'Confirm Subscription',
     menuPlanDaysLabel: 'days',
-    menuPlanUnavailable: 'There is no active 12-day cycle available to order right now. Please check back soon.',
+    menuPlanUnavailable: 'There is no meal plan available to order right now. Please check back soon.',
     menuPlanAddonTitle: 'One more thing?',
     menuPlanAddonDesc: "Our pick for you — add it to tomorrow's delivery. Optional, pick at most one.",
     menuPlanAddonReviewLabel: 'extra, delivered tomorrow',

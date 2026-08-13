@@ -78,12 +78,9 @@ menuRouter.get('/plan-window', asyncHandler(async (req, res) => {
     return res.json({ available: false, start_date: null, end_date: window.endDate, day_count: 0, days: [] });
   }
 
-  const dates = enumerateDates(window.firstAvailableDate, window.endDate);
-  const dayNumbers = dates.map(d => dateToDayNumber(d, window.cycleStartDate));
-
-  const params = [dayNumbers];
+  const params = [];
   let filter = '';
-  if (diet_type_id) { params.push(diet_type_id); filter = ` AND mi.diet_type_id = $2`; }
+  if (diet_type_id) { params.push(diet_type_id); filter = ` AND mi.diet_type_id = $1`; }
 
   const { rows } = await pool.query(
     `SELECT pi.day_number, pi.meal_time, pi.sort_order, mi.id AS menu_item_id,
@@ -91,19 +88,19 @@ menuRouter.get('/plan-window', asyncHandler(async (req, res) => {
             COALESCE(mi.category, '') AS category
      FROM twelve_day_plan_items pi
      JOIN menu_items mi ON mi.id = pi.menu_item_id
-     WHERE pi.day_number = ANY($1::int[]) AND mi.is_deleted = false ${filter}
+     WHERE mi.is_deleted = false ${filter}
      ORDER BY pi.day_number, pi.meal_time, mi.category, pi.sort_order`,
     params
   );
 
-  const dayNumberToDate = Object.fromEntries(dates.map((d, i) => [dayNumbers[i], d]));
-  const days = dates.map(date => ({ date, meals: { morning: {}, lunch: {}, evening: {} } }));
-  const dayByDate = Object.fromEntries(days.map(d => [d.date, d]));
-
+  const daysMap = {};
+  let maxDay = 0;
   for (const row of rows) {
-    const date = dayNumberToDate[row.day_number];
-    if (!date) continue;
-    const mealGroup = dayByDate[date].meals[row.meal_time];
+    if (row.day_number > maxDay) maxDay = row.day_number;
+    if (!daysMap[row.day_number]) {
+      daysMap[row.day_number] = { day_number: row.day_number, meals: { morning: {}, lunch: {}, evening: {} } };
+    }
+    const mealGroup = daysMap[row.day_number].meals[row.meal_time];
     if (!mealGroup[row.category]) mealGroup[row.category] = [];
     mealGroup[row.category].push({
       menu_item_id: row.menu_item_id,
@@ -116,12 +113,14 @@ menuRouter.get('/plan-window', asyncHandler(async (req, res) => {
     });
   }
 
+  const template_days = Array.from({ length: maxDay }, (_, i) => 
+    daysMap[i + 1] || { day_number: i + 1, meals: { morning: {}, lunch: {}, evening: {} } }
+  );
+
   res.json({
     available: true,
     start_date: window.firstAvailableDate,
-    end_date: window.endDate,
-    day_count: window.dayCount,
-    days,
+    template_days,
   });
 }));
 
