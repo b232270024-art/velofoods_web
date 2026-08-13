@@ -15,10 +15,12 @@ export const paymentsRouter = Router();
 // дуудагдана. hipay бол бодит checkout API дуудна; бусад gateway
 // (2C2P/Airwallex/банк) хараахан холбогдоогүй тул placeholder хэвээр.
 paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandler(async (req, res) => {
-  const { order_id, gateway_provider } = req.body;
+  const debugApi = process.env.DEBUG_API_ERRORS === '1';
+  try {
+    const { order_id, gateway_provider } = req.body;
 
-  const order = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
-  if (order.rows.length === 0) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+    const order = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    if (order.rows.length === 0) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
 
   if (gateway_provider === 'hipay') {
     const logger = req.app.get('logger');
@@ -69,13 +71,21 @@ paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandl
   // TODO: бусад gateway (2c2p/airwallex/bank/qpay) холбогдох
   const placeholderTransactionId = `pending_${order_id}_${Date.now()}`;
 
-  const { rows } = await pool.query(
-    `INSERT INTO payments (order_id, gateway_provider, currency, amount_usd, transaction_id, status)
-     VALUES ($1, $2, 'USD', $3, $4, 'pending') RETURNING *`,
-    [order_id, gateway_provider, order.rows[0].total_usd, placeholderTransactionId]
-  );
+    const { rows } = await pool.query(
+      `INSERT INTO payments (order_id, gateway_provider, currency, amount_usd, transaction_id, status)
+       VALUES ($1, $2, 'USD', $3, $4, 'pending') RETURNING *`,
+      [order_id, gateway_provider, order.rows[0].total_usd, placeholderTransactionId]
+    );
 
-  res.status(201).json(rows[0]);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    const logger = req.app.get('logger');
+    logger.error('payments.initiate handler error', { error: err.message, stack: err.stack });
+    if (debugApi) {
+      return res.status(err.status || 502).json({ error: err.message, stack: err.stack });
+    }
+    throw err; // let global errorHandler handle it
+  }
 }));
 
 // Hipay-ийн webhook/redirect хоёулаа signature-гүй тул зөвхөн checkoutId-г л
