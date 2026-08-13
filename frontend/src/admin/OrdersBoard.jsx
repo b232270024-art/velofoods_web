@@ -4,6 +4,7 @@ import { RefreshCw, Clock, User, AlertTriangle, ChevronDown, ChevronUp, Download
 import { isWithinDateRange } from '../lib/dateRange';
 import { downloadExcel } from '../lib/excelExport';
 import { formatOrderNumber } from '../lib/orderNumber';
+import { adminFetchJson } from '../lib/adminFetch';
 
 const STATUS_LABEL = {
   pending:   'Хүлээгдэж буй',
@@ -224,10 +225,8 @@ export function OrdersBoard() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/orders', { credentials: 'include' });
-      const data = await res.json();
-      if (Array.isArray(data)) setOrders(data);
-      setError('');
+      const data = await adminFetchJson('/api/admin/orders');
+      if (Array.isArray(data)) { setOrders(data); setError(''); }
     } catch {
       setError('Захиалгын мэдээлэл татахад алдаа гарлаа.');
     } finally {

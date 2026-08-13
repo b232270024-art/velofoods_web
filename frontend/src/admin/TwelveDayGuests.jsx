@@ -4,6 +4,7 @@ import { dietStyle } from '../components/MenuSection';
 import { isWithinDateRange } from '../lib/dateRange';
 import { downloadExcel } from '../lib/excelExport';
 import { formatOrderNumber } from '../lib/orderNumber';
+import { adminFetchJson } from '../lib/adminFetch';
 
 const MEAL_LABEL = { morning: 'Өглөө', lunch: 'Өдөр', evening: 'Орой' };
 
@@ -239,11 +240,10 @@ export function TwelveDayGuests() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [oRes, rRes] = await Promise.all([
-        fetch('/api/admin/orders', { credentials: 'include' }),
-        fetch('/api/menu/restaurants', { credentials: 'include' }),
+      const [o, r] = await Promise.all([
+        adminFetchJson('/api/admin/orders'),
+        fetch('/api/menu/restaurants', { credentials: 'include' }).then((res) => res.json()),
       ]);
-      const [o, r] = await Promise.all([oRes.json(), rRes.json()]);
       if (Array.isArray(o)) setOrders(o.filter(x => x.order_type === 'twelve_day'));
       if (Array.isArray(r)) setRestaurants(r.filter(x => x.diet_type_id));
       setError('');

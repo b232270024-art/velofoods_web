@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import io from 'socket.io-client';
 import { Send, MessageCircle } from 'lucide-react';
 import { formatOrderNumber } from '../lib/orderNumber';
+import { adminFetchJson } from '../lib/adminFetch';
 
 const STATUS_LABEL = {
   pending:   'Хүлээгдэж буй',
@@ -53,8 +54,7 @@ export function ChatPage() {
   useEffect(() => { selectedOrderIdRef.current = selectedOrderId; }, [selectedOrderId]);
 
   const fetchThreads = useCallback(() => {
-    fetch('/api/admin/chat/threads', { credentials: 'include' })
-      .then((r) => r.json())
+    adminFetchJson('/api/admin/chat/threads')
       .then((data) => { if (Array.isArray(data)) setThreads(data); })
       .catch(() => {});
   }, []);

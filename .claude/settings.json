@@ -9,7 +9,9 @@
       "Bash(nohup node --watch src/index.js)",
       "Bash(disown)",
       "Bash(curl -s http://localhost:4000/health)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(curl -s -w \"\\\\nHTTP:%{http_code}\\\\n\" -H \"Cookie: admin_token=garbage\" http://localhost:4000/api/admin/orders)",
+      "Bash(curl -s -w \"\\\\nHTTP:%{http_code}\\\\n\" http://localhost:4000/api/admin/orders)"
     ]
   }
 }
