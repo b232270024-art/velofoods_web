@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { requireSession } from '../middleware/auth.js';
 import { validateBody, createOrderSchema, createPlanOrderSchema } from '../middleware/validation.js';
-import { resolvePlanWindow, dateToDayNumber, enumerateDates } from '../services/twelveDayPlan.js';
+import { resolvePlanWindow, dateToDayNumber, enumerateDates, diffDays } from '../services/twelveDayPlan.js';
 import { generateOrderNumber } from '../services/orderNumber.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
 
 export const ordersRouter = Router();
 
@@ -28,7 +29,7 @@ async function insertOrder(client, insertFn) {
 }
 
 // items: [{ menu_item_id, quantity, guest_name }]
-ordersRouter.post('/', requireSession, validateBody(createOrderSchema), async (req, res) => {
+ordersRouter.post('/', requireSession, validateBody(createOrderSchema), asyncHandler(async (req, res) => {
   const { items } = req.body;
   const { session_id } = req.session;
 
@@ -140,7 +141,7 @@ ordersRouter.post('/', requireSession, validateBody(createOrderSchema), async (r
 // 12 хоногийн зочны сонголтуудаас (болон сонголт бол 1 нэмэлт зүйлээс) захиалга
 // үүсгэнэ. Үнэ болон сонголтын хүчинтэй эсэхийг бүхэлд нь СЕРВЕРТ дахин
 // тооцоолж баталгаажуулна — клиентээс ирсэн юуг ч (огноо, үнэ) итгэмжлэхгүй.
-ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), async (req, res) => {
+ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), asyncHandler(async (req, res) => {
   const { selections, addon_menu_item_id } = req.body;
   const { session_id } = req.session;
 
@@ -173,7 +174,6 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
     return res.status(400).json({ error: 'Захиалга хийх хамгийн эрт боломжтой огнооноос өмнө байна.' });
   }
 
-  const { diffDays } = await import('../services/twelveDayPlan.js');
   if (diffDays(startDateStr, endDateStr) > 60) {
     return res.status(400).json({ error: 'Захиалгын үргэлжлэх хугацаа хэт урт байна (дээд тал нь 60 өдөр).' });
   }
