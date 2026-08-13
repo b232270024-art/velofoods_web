@@ -112,8 +112,23 @@ if (fs.existsSync(frontendDistPath)) {
 app.use(express.static(publicPath, { setHeaders: setStaticCacheHeaders }));
 
 const httpServer = createServer(app);
-const io = new Server(httpServer, { cors: { origin: allowedOrigins, credentials: true } });
+// If no CORS_ORIGIN is configured, allow same-origin / default behavior for sockets
+const ioCors = allowedOrigins.length ? { origin: allowedOrigins, credentials: true } : { origin: true, credentials: true };
+const io = new Server(httpServer, { cors: ioCors });
 app.set('io', io);
+
+// Log Engine.IO connection errors (useful when websocket upgrade fails)
+if (io.engine && typeof io.engine.on === 'function') {
+  io.engine.on('connection_error', (err) => {
+    logger.error('Socket engine connection_error', { error: err && err.message });
+  });
+}
+
+// Log HTTP upgrade events/errors to help debug reverse-proxy websocket issues
+httpServer.on('upgrade', (req, socket, head) => {
+  // Log the upgrade request path and headers at a debug level
+  logger.debug('HTTP upgrade request', { url: req.url, headers: req.headers });
+});
 
 // 'admin' өрөө нь захиалгын PII (зочны нэр, өрөө, дэлгэрэнгүй) агуулсан
 // real-time event дамжуулдаг тул зөвхөн бодитоор нэвтэрсэн admin л нэгдэж

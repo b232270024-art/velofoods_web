@@ -209,7 +209,15 @@ export default function App() {
   // ─── Socket.io: real-time order updates ───────────────────────────────────────
   useEffect(() => {
     if (!session?.id) return;
-    const socket = io(window.location.origin);
+    const socket = io(window.location.origin, {
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
+    });
+    socket.on('connect_error', (err) => {
+      console.warn('Socket connect_error', err);
+    });
     if (session.room_number) socket.emit('join:room', session.room_number);
     socket.on('order:updated', ({ orderId, status }) => {
       if (activeOrder?.id === orderId) {

@@ -243,7 +243,15 @@ export function OrdersBoard() {
 
   useEffect(() => {
     fetchOrders();
-    const socket = io(window.location.origin);
+    const socket = io(window.location.origin, {
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
+    });
+    socket.on('connect_error', (err) => {
+      console.warn('OrdersBoard socket connect_error', err);
+    });
     socket.emit('admin:join');
     socket.on('order:new', fetchOrders);
     socket.on('order:updated', fetchOrders);

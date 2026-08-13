@@ -29,7 +29,15 @@ export function ChatWidget({ tr }) {
   // Socket connection lives for the widget's whole lifetime — mirrors the
   // per-feature socket pattern already used in App.jsx / OrdersBoard.jsx.
   useEffect(() => {
-    const socket = io(window.location.origin);
+    const socket = io(window.location.origin, {
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
+    });
+    socket.on('connect_error', (err) => {
+      console.warn('ChatWidget socket connect_error', err);
+    });
     socketRef.current = socket;
     socket.on('chat:message', (row) => {
       if (row.order_id !== resolvedOrderIdRef.current) return;

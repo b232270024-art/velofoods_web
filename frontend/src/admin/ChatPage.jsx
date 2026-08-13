@@ -61,7 +61,15 @@ export function ChatPage() {
 
   useEffect(() => {
     fetchThreads();
-    const socket = io(window.location.origin);
+    const socket = io(window.location.origin, {
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
+    });
+    socket.on('connect_error', (err) => {
+      console.warn('Admin ChatPage socket connect_error', err);
+    });
     socket.emit('admin:join');
     socket.on('chat:message', (row) => {
       fetchThreads();

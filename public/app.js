@@ -64,7 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Socket connection
   if (typeof io !== 'undefined') {
-    appState.socket = io();
+    appState.socket = io({
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: Infinity,
+      timeout: 20000,
+    });
+    appState.socket.on('connect_error', (err) => console.warn('public app socket connect_error', err));
   }
 
   initApp();
