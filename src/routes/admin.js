@@ -2,7 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/pool.js';
-import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema, chatMessageSchema, updateDeliveryTimeSlotSchema } from '../middleware/validation.js';
+import { validateBody, updateOrderStatusSchema, adminLoginSchema, updateRestaurantSchema, createRestaurantSchema, dietTypeNameSchema, createPlanItemSchema, updatePlanCycleSchema, chatMessageSchema, updateDeliveryTimeSlotSchema, uuidPattern } from '../middleware/validation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { loginLimiter } from '../middleware/rateLimiter.js';
@@ -413,28 +413,52 @@ adminRouter.patch('/orders/:id/status', validateBody(updateOrderStatusSchema), a
 // Зочин талд requireSession/order эзэмшлийн шалгалт байхгүй (order_id өөрөө
 // түлхүүр) тул эндээс ч бид зөвхөн order_id-аар нэгтгэж харуулна.
 
-// Захиалга тус бүрийн сүүлийн мессеж + уншаагүй тооноор эрэмбэлсэн жагсаалт.
+// Захиалгатай болон захиалгагүй (guest_token, "ерөнхий") thread хоёрыг нэг
+// жагсаалтад нэгтгэнэ — сүүлийн мессеж + уншаагүй тооноор эрэмбэлсэн.
+// thread_id нь тохирох тохиолдолд order_id, эсрэг тохиолдолд guest_token
+// (chat.js/ChatWidget-ийн socket room chat:<thread_id>-тэй нийцнэ).
 adminRouter.get('/chat/threads', asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT cm.order_id,
-            o.order_number, o.status AS order_status, o.total_usd,
-            s.guest_name,
-            last_msg.message AS last_message,
-            last_msg.sender AS last_sender,
-            last_msg.created_at AS last_message_at,
-            COALESCE(unread.n, 0)::int AS unread_count
-     FROM (SELECT DISTINCT order_id FROM chat_messages) cm
-     JOIN orders o ON o.id = cm.order_id
-     JOIN sessions s ON s.id = o.session_id
-     JOIN LATERAL (
-       SELECT message, sender, created_at FROM chat_messages
-       WHERE order_id = cm.order_id ORDER BY created_at DESC LIMIT 1
-     ) last_msg ON true
-     LEFT JOIN LATERAL (
-       SELECT COUNT(*)::int AS n FROM chat_messages
-       WHERE order_id = cm.order_id AND sender = 'guest' AND read_by_admin = false
-     ) unread ON true
-     ORDER BY last_msg.created_at DESC
+    `WITH order_threads AS (
+       SELECT cm.order_id AS thread_id, 'order'::text AS type,
+              o.order_number, o.status::text AS order_status, o.total_usd, s.guest_name,
+              last_msg.message AS last_message,
+              last_msg.sender AS last_sender,
+              last_msg.created_at AS last_message_at,
+              COALESCE(unread.n, 0)::int AS unread_count
+       FROM (SELECT DISTINCT order_id FROM chat_messages WHERE order_id IS NOT NULL) cm
+       JOIN orders o ON o.id = cm.order_id
+       JOIN sessions s ON s.id = o.session_id
+       JOIN LATERAL (
+         SELECT message, sender, created_at FROM chat_messages
+         WHERE order_id = cm.order_id ORDER BY created_at DESC LIMIT 1
+       ) last_msg ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS n FROM chat_messages
+         WHERE order_id = cm.order_id AND sender = 'guest' AND read_by_admin = false
+       ) unread ON true
+     ),
+     general_threads AS (
+       SELECT cm.guest_token AS thread_id, 'general'::text AS type,
+              NULL::text AS order_number, NULL::text AS order_status, NULL::numeric AS total_usd, NULL::text AS guest_name,
+              last_msg.message AS last_message,
+              last_msg.sender AS last_sender,
+              last_msg.created_at AS last_message_at,
+              COALESCE(unread.n, 0)::int AS unread_count
+       FROM (SELECT DISTINCT guest_token FROM chat_messages WHERE guest_token IS NOT NULL) cm
+       JOIN LATERAL (
+         SELECT message, sender, created_at FROM chat_messages
+         WHERE guest_token = cm.guest_token ORDER BY created_at DESC LIMIT 1
+       ) last_msg ON true
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS n FROM chat_messages
+         WHERE guest_token = cm.guest_token AND sender = 'guest' AND read_by_admin = false
+       ) unread ON true
+     )
+     SELECT * FROM order_threads
+     UNION ALL
+     SELECT * FROM general_threads
+     ORDER BY last_message_at DESC
      LIMIT 200`
   );
   res.json(rows);
@@ -476,6 +500,43 @@ adminRouter.post('/chat/:orderId/messages', validateBody(chatMessageSchema), asy
 
   const io = req.app.get('io');
   io.to(`chat:${req.params.orderId}`).emit('chat:message', row);
+  io.to('admin').emit('chat:message', row);
+
+  res.status(201).json(row);
+}));
+
+// Захиалгагүй "ерөнхий" thread-ийн admin тал (src/routes/chat.js-ийн
+// /general/:guestToken/messages-тэй хослуулан ажиллана).
+adminRouter.get('/chat/general/:guestToken/messages', asyncHandler(async (req, res) => {
+  const { guestToken } = req.params;
+  if (!uuidPattern.test(guestToken)) return res.status(400).json({ error: 'Буруу guest_token.' });
+
+  const messages = await pool.query(
+    'SELECT id, sender, message, created_at FROM chat_messages WHERE guest_token = $1 ORDER BY created_at ASC',
+    [guestToken]
+  );
+  await pool.query(
+    `UPDATE chat_messages SET read_by_admin = true WHERE guest_token = $1 AND sender = 'guest' AND read_by_admin = false`,
+    [guestToken]
+  );
+
+  res.json({ messages: messages.rows });
+}));
+
+adminRouter.post('/chat/general/:guestToken/messages', validateBody(chatMessageSchema), asyncHandler(async (req, res) => {
+  const { guestToken } = req.params;
+  if (!uuidPattern.test(guestToken)) return res.status(400).json({ error: 'Буруу guest_token.' });
+
+  const { message } = req.body;
+  const { rows } = await pool.query(
+    `INSERT INTO chat_messages (guest_token, sender, message)
+     VALUES ($1, 'admin', $2) RETURNING id, guest_token, sender, message, created_at`,
+    [guestToken, message]
+  );
+  const row = rows[0];
+
+  const io = req.app.get('io');
+  io.to(`chat:${guestToken}`).emit('chat:message', row);
   io.to('admin').emit('chat:message', row);
 
   res.status(201).json(row);

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
-import { validateBody, chatMessageSchema, orderNumberPattern } from '../middleware/validation.js';
+import { validateBody, chatMessageSchema, orderNumberPattern, uuidPattern } from '../middleware/validation.js';
 
 export const chatRouter = Router();
 
@@ -50,6 +50,41 @@ chatRouter.post('/:orderNumber/messages', validateBody(chatMessageSchema), async
   const io = req.app.get('io');
   io.to('admin').emit('chat:message', row);
   io.to(`chat:${order.id}`).emit('chat:message', row);
+
+  res.status(201).json(row);
+});
+
+// Захиалгагүй "ерөнхий" чат — клиент талд үүсгэсэн guest_token (UUID,
+// localStorage-д хадгалагдана) нь order_number-тэй адил "нэвтрэх түлхүүр"
+// болдог тул энд ч requireSession шаардахгүй. Socket room нэрийг order-based
+// чаттай ижил хэлбэрээр (chat:<id>) ашигладаг тул index.js-ийн chat:join
+// handler-т өөрчлөлт хийх шаардлагагүй — guest_token нь өөрөө UUID.
+chatRouter.get('/general/:guestToken/messages', async (req, res) => {
+  const { guestToken } = req.params;
+  if (!uuidPattern.test(guestToken)) return res.status(400).json({ error: 'Буруу guest_token.' });
+
+  const messages = await pool.query(
+    'SELECT id, sender, message, created_at FROM chat_messages WHERE guest_token = $1 ORDER BY created_at ASC',
+    [guestToken]
+  );
+  res.json({ messages: messages.rows });
+});
+
+chatRouter.post('/general/:guestToken/messages', validateBody(chatMessageSchema), async (req, res) => {
+  const { guestToken } = req.params;
+  if (!uuidPattern.test(guestToken)) return res.status(400).json({ error: 'Буруу guest_token.' });
+
+  const { message } = req.body;
+  const { rows } = await pool.query(
+    `INSERT INTO chat_messages (guest_token, sender, message)
+     VALUES ($1, 'guest', $2) RETURNING id, guest_token, sender, message, created_at`,
+    [guestToken, message]
+  );
+  const row = rows[0];
+
+  const io = req.app.get('io');
+  io.to('admin').emit('chat:message', row);
+  io.to(`chat:${guestToken}`).emit('chat:message', row);
 
   res.status(201).json(row);
 });

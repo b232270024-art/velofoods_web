@@ -4,12 +4,18 @@ import { MessageCircle, X, Send, ArrowLeft } from 'lucide-react';
 import { formatOrderNumber, normalizeOrderNumber } from '../lib/orderNumber';
 
 const ORDER_NUMBER_KEY = 'chat_order_id';
+// Захиалгагүйгээр бичих зочдод зориулсан клиент талд үүсгэсэн UUID —
+// order_number-тэй адил "нэвтрэх түлхүүр" загвар (14_general_chat.js).
+const GUEST_TOKEN_KEY = 'chat_guest_token';
 
 export function ChatWidget({ tr }) {
   const [open, setOpen] = useState(false);
+  // 'order' | 'general' | null (null = gate дэлгэц харагдана)
+  const [threadType, setThreadType] = useState(null);
   // Богино захиалгын дугаар (зураасгүй, жишээ нь "4XK9P2QW") — гэрчлэлт
   // амжилттай болсны дараа тавигдана, гэхдээ дотоод socket room/message-ийн
-  // харьцуулалт хэвээрээ бодит UUID (order.id) дээр тулгуурлана (resolvedOrderIdRef).
+  // харьцуулалт хэвээрээ бодит UUID (order.id эсвэл guest_token) дээр
+  // тулгуурлана (resolvedThreadRef).
   const [orderNumber, setOrderNumber] = useState(null);
   const [messages, setMessages] = useState([]);
   const [gateInput, setGateInput] = useState('');
@@ -20,7 +26,7 @@ export function ChatWidget({ tr }) {
   const [unread, setUnread] = useState(false);
 
   const socketRef = useRef(null);
-  const resolvedOrderIdRef = useRef(null);
+  const resolvedThreadRef = useRef(null);
   const openRef = useRef(false);
   const scrollRef = useRef(null);
 
@@ -40,8 +46,11 @@ export function ChatWidget({ tr }) {
     });
     socketRef.current = socket;
     socket.on('chat:message', (row) => {
-      if (row.order_id !== resolvedOrderIdRef.current) return;
-      // The guest's own socket is a member of chat:<orderId>, so a message it
+      // Order-based rows carry order_id, general-thread rows carry guest_token
+      // (chat_messages_thread_check — exactly one of the two is ever set).
+      const rowThreadId = row.order_id || row.guest_token;
+      if (rowThreadId !== resolvedThreadRef.current) return;
+      // The guest's own socket is a member of chat:<threadId>, so a message it
       // just sent (and already appended optimistically below) echoes back here
       // too — skip it by id instead of appending a visible duplicate.
       setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
@@ -51,23 +60,42 @@ export function ChatWidget({ tr }) {
   }, []);
 
   // Resume a cached thread (same browser) without re-asking for the order number.
+  // Order threads take priority over a cached general thread if both exist.
   // `ignore` guards against React StrictMode's dev-mode double-invoke firing
   // this fetch twice on mount and racing itself.
   useEffect(() => {
-    const cached = localStorage.getItem(ORDER_NUMBER_KEY);
-    if (!cached) return;
     let ignore = false;
-    fetch(`/api/chat/${cached}/messages`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (ignore) return;
-        if (!data) { localStorage.removeItem(ORDER_NUMBER_KEY); return; }
-        resolvedOrderIdRef.current = data.order.id;
-        setOrderNumber(data.order.order_number);
-        setMessages(data.messages);
-        socketRef.current?.emit('chat:join', data.order.id);
-      })
-      .catch(() => {});
+
+    const cachedOrder = localStorage.getItem(ORDER_NUMBER_KEY);
+    if (cachedOrder) {
+      fetch(`/api/chat/${cachedOrder}/messages`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (ignore) return;
+          if (!data) { localStorage.removeItem(ORDER_NUMBER_KEY); return; }
+          resolvedThreadRef.current = data.order.id;
+          setThreadType('order');
+          setOrderNumber(data.order.order_number);
+          setMessages(data.messages);
+          socketRef.current?.emit('chat:join', data.order.id);
+        })
+        .catch(() => {});
+      return () => { ignore = true; };
+    }
+
+    const cachedGuestToken = localStorage.getItem(GUEST_TOKEN_KEY);
+    if (cachedGuestToken) {
+      fetch(`/api/chat/general/${cachedGuestToken}/messages`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (ignore || !data) return;
+          resolvedThreadRef.current = cachedGuestToken;
+          setThreadType('general');
+          setMessages(data.messages);
+          socketRef.current?.emit('chat:join', cachedGuestToken);
+        })
+        .catch(() => {});
+    }
     return () => { ignore = true; };
   }, []);
 
@@ -94,7 +122,8 @@ export function ChatWidget({ tr }) {
       if (!res.ok) throw new Error(tr.chatGateNotFound);
       const data = await res.json();
       localStorage.setItem(ORDER_NUMBER_KEY, data.order.order_number);
-      resolvedOrderIdRef.current = data.order.id;
+      resolvedThreadRef.current = data.order.id;
+      setThreadType('order');
       setOrderNumber(data.order.order_number);
       setMessages(data.messages);
       socketRef.current?.emit('chat:join', data.order.id);
@@ -106,9 +135,36 @@ export function ChatWidget({ tr }) {
     }
   };
 
-  const handleChangeOrder = () => {
-    localStorage.removeItem(ORDER_NUMBER_KEY);
-    resolvedOrderIdRef.current = null;
+  // Захиалгагүйгээр бичих зочны thread — эхний удаа token үүсгэж
+  // localStorage-д хадгална, дараа нь нээх бүрт ижил thread руу автоматаар
+  // сэргэнэ (order thread-ийн cache-тэй адил зарчим, доорх resume effect үзнэ үү).
+  const handleStartGeneral = async () => {
+    let token = localStorage.getItem(GUEST_TOKEN_KEY);
+    if (!token) {
+      token = crypto.randomUUID();
+      localStorage.setItem(GUEST_TOKEN_KEY, token);
+    }
+    setGateLoading(true);
+    try {
+      const res = await fetch(`/api/chat/general/${token}/messages`);
+      const data = res.ok ? await res.json() : { messages: [] };
+      resolvedThreadRef.current = token;
+      setThreadType('general');
+      setMessages(data.messages || []);
+      socketRef.current?.emit('chat:join', token);
+    } finally {
+      setGateLoading(false);
+    }
+  };
+
+  // Захиалгын thread-ийг "мартаж" gate рүү буцна (өөр захиалгын дугаар оруулах
+  // боломжтой болгоно). Ерөнхий thread дээр token-ийг устгахгүй — зөвхөн
+  // харагдаж буй дэлгэцийг буцаана, дараа "Chat without an order" дарахад
+  // ижил thread рүү сэргэнэ.
+  const handleBack = () => {
+    if (threadType === 'order') localStorage.removeItem(ORDER_NUMBER_KEY);
+    resolvedThreadRef.current = null;
+    setThreadType(null);
     setOrderNumber(null);
     setMessages([]);
     setGateInput('');
@@ -122,7 +178,10 @@ export function ChatWidget({ tr }) {
     setSending(true);
     setDraft('');
     try {
-      const res = await fetch(`/api/chat/${orderNumber}/messages`, {
+      const url = threadType === 'general'
+        ? `/api/chat/general/${resolvedThreadRef.current}/messages`
+        : `/api/chat/${orderNumber}/messages`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
@@ -174,46 +233,64 @@ export function ChatWidget({ tr }) {
             padding: '14px 18px', background: 'var(--brand-green)', color: '#fff',
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            {orderNumber && (
-              <button onClick={handleChangeOrder} title={tr.chatChangeOrderBtn} style={{ color: '#fff', background: 'transparent', display: 'flex' }}>
+            {threadType && (
+              <button onClick={handleBack} title={threadType === 'order' ? tr.chatChangeOrderBtn : tr.chatGeneralBackBtn} style={{ color: '#fff', background: 'transparent', display: 'flex' }}>
                 <ArrowLeft size={18} />
               </button>
             )}
             <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '0.95rem' }}>
               {tr.chatHeaderTitle}
             </span>
-            {orderNumber && (
+            {threadType === 'order' && (
               <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: '0.75rem', opacity: 0.85 }}>
                 {formatOrderNumber(orderNumber)}
               </span>
             )}
           </div>
 
-          {!orderNumber ? (
-            <form onSubmit={handleGateSubmit} style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-dark)' }}>{tr.chatGateTitle}</p>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{tr.chatGateDesc}</p>
-              <input
-                value={gateInput}
-                onChange={(e) => setGateInput(e.target.value.toUpperCase())}
-                placeholder={tr.chatGatePlaceholder}
-                autoFocus
-                style={{
-                  padding: '10px 12px', borderRadius: 8,
-                  border: '1.5px solid var(--border)', fontSize: '0.85rem',
-                  color: 'var(--text-dark)', background: 'var(--bg-white)',
-                }}
-              />
-              {gateError && <p style={{ color: '#dc2626', fontSize: '0.8rem' }}>{gateError}</p>}
+          {!threadType ? (
+            <div style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+              <form onSubmit={handleGateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-dark)' }}>{tr.chatGateTitle}</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{tr.chatGateDesc}</p>
+                <input
+                  value={gateInput}
+                  onChange={(e) => setGateInput(e.target.value.toUpperCase())}
+                  placeholder={tr.chatGatePlaceholder}
+                  autoFocus
+                  style={{
+                    padding: '10px 12px', borderRadius: 8,
+                    border: '1.5px solid var(--border)', fontSize: '0.85rem',
+                    color: 'var(--text-dark)', background: 'var(--bg-white)',
+                  }}
+                />
+                {gateError && <p style={{ color: '#dc2626', fontSize: '0.8rem' }}>{gateError}</p>}
+                <button
+                  type="submit"
+                  disabled={gateLoading || !gateInput.trim()}
+                  className="btn-primary"
+                  style={{ padding: '10px 16px', fontSize: '0.85rem', opacity: gateLoading || !gateInput.trim() ? 0.6 : 1 }}
+                >
+                  {gateLoading ? tr.loading : tr.chatGateSubmitBtn}
+                </button>
+              </form>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: '0.72rem' }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                {tr.chatGateOrDivider}
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+
               <button
-                type="submit"
-                disabled={gateLoading || !gateInput.trim()}
-                className="btn-primary"
-                style={{ padding: '10px 16px', fontSize: '0.85rem', opacity: gateLoading || !gateInput.trim() ? 0.6 : 1 }}
+                type="button"
+                onClick={handleStartGeneral}
+                disabled={gateLoading}
+                className="btn-outline"
+                style={{ padding: '10px 16px', fontSize: '0.85rem', justifyContent: 'center', opacity: gateLoading ? 0.6 : 1 }}
               >
-                {gateLoading ? tr.loading : tr.chatGateSubmitBtn}
+                {tr.chatGateGeneralBtn}
               </button>
-            </form>
+            </div>
           ) : (
             <>
               <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -42,16 +42,19 @@ function StatusBadge({ status }) {
 
 export function ChatPage() {
   const [threads, setThreads] = useState([]);
-  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  // Захиалгатай ('order') болон захиалгагүй ('general', guest_token) thread
+  // хоёулаа /api/admin/chat/threads-с нэг жагсаалтад ирнэ (thread_id, type талбартай).
+  const [selectedThreadId, setSelectedThreadId] = useState(null);
+  const [selectedThreadType, setSelectedThreadType] = useState(null);
   const [orderDetail, setOrderDetail] = useState(null);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
 
-  const selectedOrderIdRef = useRef(null);
+  const selectedThreadIdRef = useRef(null);
   const scrollRef = useRef(null);
-  useEffect(() => { selectedOrderIdRef.current = selectedOrderId; }, [selectedOrderId]);
+  useEffect(() => { selectedThreadIdRef.current = selectedThreadId; }, [selectedThreadId]);
 
   const fetchThreads = useCallback(() => {
     adminFetchJson('/api/admin/chat/threads')
@@ -73,7 +76,8 @@ export function ChatPage() {
     socket.emit('admin:join');
     socket.on('chat:message', (row) => {
       fetchThreads();
-      if (row.order_id === selectedOrderIdRef.current) {
+      const rowThreadId = row.order_id || row.guest_token;
+      if (rowThreadId === selectedThreadIdRef.current) {
         // Our own reply already appears optimistically in handleSend — this
         // room-broadcast echoes it back, so skip it by id to avoid a duplicate.
         setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
@@ -86,18 +90,20 @@ export function ChatPage() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
-  const handleSelectThread = async (orderId) => {
-    setSelectedOrderId(orderId);
+  const handleSelectThread = async (threadId, type) => {
+    setSelectedThreadId(threadId);
+    setSelectedThreadType(type);
     setMessages([]);
     setOrderDetail(null);
     setLoadingThread(true);
     try {
-      const res = await fetch(`/api/admin/chat/${orderId}/messages`, { credentials: 'include' });
+      const url = type === 'general' ? `/api/admin/chat/general/${threadId}/messages` : `/api/admin/chat/${threadId}/messages`;
+      const res = await fetch(url, { credentials: 'include' });
       const data = await res.json();
       if (res.ok) {
         setMessages(data.messages);
-        setOrderDetail(data.order);
-        setThreads((prev) => prev.map((t) => (t.order_id === orderId ? { ...t, unread_count: 0 } : t)));
+        setOrderDetail(type === 'order' ? data.order : null);
+        setThreads((prev) => prev.map((t) => (t.thread_id === threadId ? { ...t, unread_count: 0 } : t)));
       }
     } finally {
       setLoadingThread(false);
@@ -107,11 +113,14 @@ export function ChatPage() {
   const handleSend = async (e) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text || sending || !selectedOrderId) return;
+    if (!text || sending || !selectedThreadId) return;
     setSending(true);
     setDraft('');
     try {
-      const res = await fetch(`/api/admin/chat/${selectedOrderId}/messages`, {
+      const url = selectedThreadType === 'general'
+        ? `/api/admin/chat/general/${selectedThreadId}/messages`
+        : `/api/admin/chat/${selectedThreadId}/messages`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -135,16 +144,18 @@ export function ChatPage() {
         ) : (
           threads.map((t) => (
             <button
-              key={t.order_id}
-              onClick={() => handleSelectThread(t.order_id)}
+              key={t.thread_id}
+              onClick={() => handleSelectThread(t.thread_id, t.type)}
               style={{
                 display: 'block', width: '100%', textAlign: 'left',
                 padding: '14px 16px', borderBottom: '1px solid var(--border)',
-                background: selectedOrderId === t.order_id ? 'var(--bg-muted)' : 'transparent',
+                background: selectedThreadId === t.thread_id ? 'var(--bg-muted)' : 'transparent',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-dark)' }}>{t.guest_name}</span>
+                <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-dark)' }}>
+                  {t.type === 'general' ? 'Ерөнхий чат' : t.guest_name}
+                </span>
                 {t.unread_count > 0 && (
                   <span style={{
                     background: '#ef4444', color: '#fff', borderRadius: 999,
@@ -155,10 +166,22 @@ export function ChatPage() {
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                <StatusBadge status={t.order_status} />
-                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  {formatOrderNumber(t.order_number)}
-                </span>
+                {t.type === 'general' ? (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', padding: '3px 10px',
+                    borderRadius: 999, fontSize: '0.72rem', fontWeight: 700,
+                    background: '#e0e7ff', color: '#3730a3', whiteSpace: 'nowrap',
+                  }}>
+                    Захиалгагүй
+                  </span>
+                ) : (
+                  <>
+                    <StatusBadge status={t.order_status} />
+                    <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      {formatOrderNumber(t.order_number)}
+                    </span>
+                  </>
+                )}
               </div>
               <p style={{
                 fontSize: '0.78rem', color: 'var(--text-muted)',
@@ -174,7 +197,7 @@ export function ChatPage() {
 
       {/* Conversation */}
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, minWidth: 0 }}>
-        {!selectedOrderId ? (
+        {!selectedThreadId ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', gap: 10 }}>
             <MessageCircle size={32} />
             <p style={{ fontSize: '0.9rem' }}>Зүүн талаас чат сонгоно уу.</p>
@@ -182,18 +205,24 @@ export function ChatPage() {
         ) : (
           <>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>{orderDetail?.guest_name}</span>
-                {orderDetail && <StatusBadge status={orderDetail.status} />}
-              </div>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                {formatOrderNumber(orderDetail?.order_number)}
-              </p>
-              {orderDetail && (
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                  {orderDetail.room_number ? `${orderDetail.hotel_name || ''} Өрөө ${orderDetail.room_number} · ` : ''}
-                  ${Number(orderDetail.total_usd).toFixed(2)}
-                </p>
+              {selectedThreadType === 'general' ? (
+                <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>Ерөнхий чат (захиалгагүй)</span>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 800, fontSize: '0.95rem' }}>{orderDetail?.guest_name}</span>
+                    {orderDetail && <StatusBadge status={orderDetail.status} />}
+                  </div>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                    {formatOrderNumber(orderDetail?.order_number)}
+                  </p>
+                  {orderDetail && (
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                      {orderDetail.room_number ? `${orderDetail.hotel_name || ''} Өрөө ${orderDetail.room_number} · ` : ''}
+                      ${Number(orderDetail.total_usd).toFixed(2)}
+                    </p>
+                  )}
+                </>
               )}
             </div>
 

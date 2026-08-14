@@ -202,15 +202,22 @@ CREATE INDEX idx_payments_order ON payments(order_id);
 -- захиалгын ID-гаараа (нэвтрэлтгүйгээр) чатыг нээнэ, admin dashboard-ийн
 -- Чат хуудаснаас хариулна. order_id нь өөрөө "нэвтрэх түлхүүр" болдог тул
 -- (Hipay redirect-ийн ?order_id= адил) session-тэй холбоо шаардлагагүй.
+-- Захиалгагүй/өөр шалтгаанаар бичих зочдод зориулж guest_token (клиент
+-- талд үүсгэсэн UUID, order_number-тэй адил "нэвтрэх түлхүүр" загвар)
+-- ашигласан "ерөнхий" thread-ийг мөн энд хадгална — order_id, guest_token
+-- хоёрын яг НЭГ нь тавигдсан байх ёстой.
 CREATE TABLE chat_messages (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id       uuid NOT NULL REFERENCES orders(id),
+  order_id       uuid REFERENCES orders(id),
+  guest_token    uuid,
   sender         text NOT NULL CHECK (sender IN ('guest', 'admin')),
   message        text NOT NULL,
   read_by_admin  boolean NOT NULL DEFAULT false,
-  created_at     timestamptz NOT NULL DEFAULT now()
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  CHECK ((order_id IS NOT NULL AND guest_token IS NULL) OR (order_id IS NULL AND guest_token IS NOT NULL))
 );
 CREATE INDEX idx_chat_messages_order ON chat_messages(order_id);
+CREATE INDEX idx_chat_messages_guest_token ON chat_messages(guest_token);
 
 -- Initial Seed Data
 INSERT INTO restaurants (id, name) VALUES
