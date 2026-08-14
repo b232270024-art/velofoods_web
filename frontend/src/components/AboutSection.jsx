@@ -78,9 +78,12 @@ export function AboutSection({ tr, onAboutClick }) {
               {tr.aboutDesc}
             </p>
 
-            <button className="btn-primary" style={{ padding: '13px 32px' }} onClick={onAboutClick}>
-              {tr.aboutBtn}
-            </button>
+            {/* Түр хугацаагаар нуусан: "Meet our partner" товч */}
+            {false && (
+              <button className="btn-primary" style={{ padding: '13px 32px' }} onClick={onAboutClick}>
+                {tr.aboutBtn}
+              </button>
+            )}
           </div>
         </div>
       </div>
