@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { validateBody, chatMessageSchema, orderNumberPattern, uuidPattern } from '../middleware/validation.js';
+import { asyncHandler } from '../middleware/errorHandler.js';
 
 export const chatRouter = Router();
 
@@ -24,7 +25,7 @@ async function findOrder(codeInput) {
 
 // Мөн widget-ийн "захиалгын дугаар баталгаажуулах" алхамд ашиглагдана — 404
 // бол тухайн дугаартай захиалга байхгүй гэсэн үг.
-chatRouter.get('/:orderNumber/messages', async (req, res) => {
+chatRouter.get('/:orderNumber/messages', asyncHandler(async (req, res) => {
   const order = await findOrder(req.params.orderNumber);
   if (!order) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
 
@@ -33,9 +34,9 @@ chatRouter.get('/:orderNumber/messages', async (req, res) => {
     [order.id]
   );
   res.json({ order, messages: messages.rows });
-});
+}));
 
-chatRouter.post('/:orderNumber/messages', validateBody(chatMessageSchema), async (req, res) => {
+chatRouter.post('/:orderNumber/messages', validateBody(chatMessageSchema), asyncHandler(async (req, res) => {
   const order = await findOrder(req.params.orderNumber);
   if (!order) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
 
@@ -52,14 +53,14 @@ chatRouter.post('/:orderNumber/messages', validateBody(chatMessageSchema), async
   io.to(`chat:${order.id}`).emit('chat:message', row);
 
   res.status(201).json(row);
-});
+}));
 
 // Захиалгагүй "ерөнхий" чат — клиент талд үүсгэсэн guest_token (UUID,
 // localStorage-д хадгалагдана) нь order_number-тэй адил "нэвтрэх түлхүүр"
 // болдог тул энд ч requireSession шаардахгүй. Socket room нэрийг order-based
 // чаттай ижил хэлбэрээр (chat:<id>) ашигладаг тул index.js-ийн chat:join
 // handler-т өөрчлөлт хийх шаардлагагүй — guest_token нь өөрөө UUID.
-chatRouter.get('/general/:guestToken/messages', async (req, res) => {
+chatRouter.get('/general/:guestToken/messages', asyncHandler(async (req, res) => {
   const { guestToken } = req.params;
   if (!uuidPattern.test(guestToken)) return res.status(400).json({ error: 'Буруу guest_token.' });
 
@@ -68,9 +69,9 @@ chatRouter.get('/general/:guestToken/messages', async (req, res) => {
     [guestToken]
   );
   res.json({ messages: messages.rows });
-});
+}));
 
-chatRouter.post('/general/:guestToken/messages', validateBody(chatMessageSchema), async (req, res) => {
+chatRouter.post('/general/:guestToken/messages', validateBody(chatMessageSchema), asyncHandler(async (req, res) => {
   const { guestToken } = req.params;
   if (!uuidPattern.test(guestToken)) return res.status(400).json({ error: 'Буруу guest_token.' });
 
@@ -87,4 +88,4 @@ chatRouter.post('/general/:guestToken/messages', validateBody(chatMessageSchema)
   io.to(`chat:${guestToken}`).emit('chat:message', row);
 
   res.status(201).json(row);
-});
+}));
