@@ -33,7 +33,7 @@ export function Header({ session, cartCount, cartTotal, onOpenCart, language, on
             </span>
           </div>
           <nav className="nav-links">
-            <span className="nav-link" onClick={onOpenAbout} style={{ fontWeight: 800, color: 'var(--text-black)' }}>{tr.aboutBtn || 'About Us'}</span>
+            {/* Түр хугацаагаар нуусан: "About Us" / "Meet our partner" линк */}
             <span className="nav-link" onClick={onOpenMenu} style={{ fontWeight: 800, color: 'var(--text-black)' }}>{tr.navMenu}</span>
           </nav>
 
