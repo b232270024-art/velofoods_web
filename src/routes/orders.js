@@ -154,7 +154,7 @@ ordersRouter.post('/', requireSession, validateBody(createOrderSchema), asyncHan
 // үүсгэнэ. Үнэ болон сонголтын хүчинтэй эсэхийг бүхэлд нь СЕРВЕРТ дахин
 // тооцоолж баталгаажуулна — клиентээс ирсэн юуг ч (огноо, үнэ) итгэмжлэхгүй.
 ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), asyncHandler(async (req, res) => {
-  const { selections, addon_menu_item_id, skip_lunch } = req.body;
+  const { selections, addons, skip_lunch } = req.body;
   const { session_id } = req.session;
 
   const sessionRes = await pool.query(
@@ -276,16 +276,33 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
       throw new Error('Зарим өдөр/цаг/ангилалд сонголт дутуу байна.');
     }
 
-    let addonUnitPrice = null;
-    if (addon_menu_item_id) {
-      const addon = await client.query(
-        `SELECT price_usd FROM menu_items
-         WHERE id = $1 AND is_addon_recommended = true AND is_deleted = false AND available = true`,
-        [addon_menu_item_id]
+    // Нэмэлт (addon) хоол тус бүр = нэг тусгай хүргэлт (өдөр + meal_time)
+    // тул нэг menu_item_id олон мөрөнд (өөр өдрөөр) давтагдаж болно — "3
+    // зүйл сонгоод бүгдийг нэг өдөрт" эсвэл "тус бүрийг өөр өдөрт" гэдгийг
+    // frontend аль хэдийн шийдээд, энд зөвхөн бүрдлийг баталгаажуулна.
+    const resolvedAddons = [];
+    if (addons && addons.length > 0) {
+      const distinctAddonIds = [...new Set(addons.map(a => a.menu_item_id))];
+      const addonRows = await client.query(
+        `SELECT id, price_usd FROM menu_items
+         WHERE id = ANY($1::uuid[]) AND is_addon_recommended = true AND is_deleted = false AND available = true`,
+        [distinctAddonIds]
       );
-      if (addon.rows.length === 0) throw new Error('Сонгосон нэмэлт зүйл боломжгүй байна.');
-      addonUnitPrice = Number(addon.rows[0].price_usd);
-      total += addonUnitPrice;
+      const addonPriceById = new Map(addonRows.rows.map(r => [r.id, Number(r.price_usd)]));
+
+      const expectedDateSet = new Set(expectedDates);
+      for (const a of addons) {
+        if (!expectedDateSet.has(a.plan_date)) {
+          throw new Error(`Нэмэлт хоолны огноо (${a.plan_date}) сонгосон хугацааны цонхны гадна байна.`);
+        }
+        if (skip_lunch && a.meal_time === 'lunch') {
+          throw new Error('Өдрийн хоол хассан тул нэмэлт хоолыг ч lunch цагт хуваарилах боломжгүй.');
+        }
+        const price = addonPriceById.get(a.menu_item_id);
+        if (price === undefined) throw new Error('Сонгосон нэмэлт зүйл боломжгүй байна.');
+        total += price;
+        resolvedAddons.push({ menu_item_id: a.menu_item_id, plan_date: a.plan_date, meal_time: a.meal_time, unitPrice: price });
+      }
     }
 
     const orderRes = await insertOrder(client, (orderNumber) => client.query(
@@ -303,11 +320,11 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
       );
     }
 
-    if (addon_menu_item_id) {
+    for (const addon of resolvedAddons) {
       await client.query(
         `INSERT INTO order_items (order_id, menu_item_id, guest_name, quantity, unit_price_usd, plan_date, plan_meal_time, is_addon)
-         VALUES ($1, $2, $3, 1, $4, $5, NULL, true)`,
-        [orderId, addon_menu_item_id, session.guest_name, addonUnitPrice, startDateStr]
+         VALUES ($1, $2, $3, 1, $4, $5, $6, true)`,
+        [orderId, addon.menu_item_id, session.guest_name, addon.unitPrice, addon.plan_date, addon.meal_time]
       );
     }
 

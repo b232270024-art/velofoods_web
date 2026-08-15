@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Utensils, RefreshCcw, AlertTriangle, Info, Check, Sunrise, Sun, Moon } from 'lucide-react';
+import { ChevronLeft, Utensils, RefreshCcw, AlertTriangle, Info, Check, Sunrise, Sun, Moon, CalendarClock } from 'lucide-react';
 import { InlineDateRangePicker } from './InlineDateRangePicker';
+import { AddonScheduleModal, ScheduleSummary } from './AddonScheduleModal';
 
 const MEAL_KEYS = ['morning', 'lunch', 'evening'];
 
@@ -205,9 +206,10 @@ function MealTimeSection({ date, mealKey, label, categories, selections, onSelec
 }
 
 // Хуудасны доод хэсэгт байнга байрлах "Санал болгох" нэмэлт зүйлийн сонголт —
-// admin-ийн is_addon_recommended гэж тэмдэглэсэн зүйлсээс зочин дан ганц (эсвэл
-// юу ч биш) сонгоно. Дахин дарвал сонголтоо цуцална.
-function AddonSection({ menuItems, tr, addonId, onSelect }) {
+// admin-ийн is_addon_recommended гэж тэмдэглэсэн зүйлсээс зочин хэдэн ч зүйл
+// сонгож болно (multi-select). Хэдэн өдөр/аль цагт хүргэгдэхийг дараа нь
+// AddonScheduleModal-оор тус тусад нь тохируулна.
+function AddonSection({ menuItems, tr, selectedIds, onToggle }) {
   const options = menuItems.filter(i => i.is_addon_recommended && i.available !== false);
   if (options.length === 0) return null;
 
@@ -217,15 +219,15 @@ function AddonSection({ menuItems, tr, addonId, onSelect }) {
         {tr.menuPlanAddonTitle || 'One more thing?'}
       </h3>
       <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 16 }}>
-        {tr.menuPlanAddonDesc || 'Our pick for you — add it to tomorrow\'s delivery. Optional, pick at most one.'}
+        {tr.menuPlanAddonDesc || 'Our picks for you — choose as many as you\'d like, then pick which days to receive them.'}
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 12 }}>
         {options.map(item => {
-          const active = addonId === item.id;
+          const active = selectedIds.includes(item.id);
           return (
             <button
               key={item.id}
-              onClick={() => onSelect(active ? null : item.id)}
+              onClick={() => onToggle(item.id)}
               style={{
                 textAlign: 'left', padding: 0, overflow: 'hidden', borderRadius: 12,
                 border: active ? '2px solid var(--brand-green)' : '1px solid var(--border-card)',
@@ -265,7 +267,11 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
   const [error, setError] = useState('');
   const [selections, setSelections] = useState({}); // { [date]: { [mealKey]: { [category]: menu_item_id } } }
   const [activeDate, setActiveDate] = useState(null);
-  const [addonId, setAddonId] = useState(null);
+  // Зочны сонгосон нэмэлт (addon) зүйлсийн ID (сонгосон дараалалтай) + тус
+  // бүрийн хүргэлтийн хуваарь (хэдэн өдөр, аль цагт).
+  const [addonSelectedIds, setAddonSelectedIds] = useState([]);
+  const [addonSchedules, setAddonSchedules] = useState({}); // { [menu_item_id]: { mode, dates: string[], meal_time } }
+  const [addonModalOpen, setAddonModalOpen] = useState(false);
   // Зочин 12 хоногийн турш өдрийн хоол (lunch) авахгүй бол true — бүх өдрийн
   // lunch сонголт нийт үнэ болон эцсийн захиалгаас алгасагдана.
   const [skipLunch, setSkipLunch] = useState(false);
@@ -302,8 +308,6 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
       },
     }));
   };
-
-  const addonItem = addonId ? menuItems.find(i => i.id === addonId) : null;
 
   // Generate dynamic days array based on startDate and endDate
   const dynamicDays = useMemo(() => {
@@ -354,8 +358,88 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
     }
   }, [dynamicDays]);
 
+  const validDates = useMemo(() => dynamicDays.map(d => d.date), [dynamicDays]);
+
+  const addonItems = useMemo(
+    () => addonSelectedIds.map(id => menuItems.find(i => i.id === id)).filter(Boolean),
+    [addonSelectedIds, menuItems]
+  );
+
+  const handleAddonToggle = (id) => {
+    setAddonSelectedIds(prev => {
+      if (prev.includes(id)) {
+        setAddonSchedules(s => { const next = { ...s }; delete next[id]; return next; });
+        return prev.filter(x => x !== id);
+      }
+      setAddonSchedules(s => ({
+        ...s,
+        [id]: { mode: 'once', dates: validDates.slice(0, 1), meal_time: 'morning' },
+      }));
+      return [...prev, id];
+    });
+  };
+
+  const handleAddonScheduleChange = (id, patch) => {
+    setAddonSchedules(prev => ({ ...prev, [id]: patch }));
+  };
+
+  // skipLunch асаагдвал нэмэлт зүйлсийн lunch цагт хуваарилагдсан
+  // хуваариудыг morning руу автоматаар шилжүүлнэ — эс бөгөөс lunch байхгүй
+  // өдөр нэмэлт хоол ч lunch-аар "хүргэгдэх" зөрчилтэй төлөв үлдэнэ.
+  useEffect(() => {
+    if (!skipLunch) return;
+    setAddonSchedules(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [id, sched] of Object.entries(prev)) {
+        if (sched.meal_time === 'lunch') {
+          next[id] = { ...sched, meal_time: 'morning' };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [skipLunch]);
+
+  // Огнооны цонх (validDates) өөрчлөгдвөл нэмэлт зүйлсийн хуваарийг цонхны
+  // дотор байлгана — daily горим шинэ бүх өдрийг автоматаар дагана, бусад
+  // горимд цонхны гадуур унасан огноог хасна.
+  useEffect(() => {
+    if (validDates.length === 0) return;
+    setAddonSchedules(prev => {
+      let changed = false;
+      const next = { ...prev };
+      const validSet = new Set(validDates);
+      for (const [id, sched] of Object.entries(prev)) {
+        if (sched.mode === 'daily') {
+          if (sched.dates.length !== validDates.length || sched.dates.some((d, i) => d !== validDates[i])) {
+            next[id] = { ...sched, dates: validDates };
+            changed = true;
+          }
+          continue;
+        }
+        const kept = sched.dates.filter(d => validSet.has(d));
+        if (kept.length !== sched.dates.length) {
+          next[id] = { ...sched, dates: kept.length ? kept : validDates.slice(0, 1) };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [validDates]);
+
+  const addonTotal = useMemo(() => {
+    let sum = 0;
+    for (const id of addonSelectedIds) {
+      const item = menuItems.find(i => i.id === id);
+      const sched = addonSchedules[id];
+      if (item && sched) sum += Number(item.price_usd) * sched.dates.length;
+    }
+    return sum;
+  }, [addonSelectedIds, addonSchedules, menuItems]);
+
   const total = useMemo(() => {
-    if (!dynamicDays.length) return 0;
+    if (!dynamicDays.length) return addonTotal;
     let sum = 0;
     for (const day of dynamicDays) {
       for (const meal of MEAL_KEYS) {
@@ -367,9 +451,8 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
         }
       }
     }
-    if (addonItem) sum += Number(addonItem.price_usd);
-    return sum;
-  }, [dynamicDays, selections, addonItem, skipLunch]);
+    return sum + addonTotal;
+  }, [dynamicDays, selections, skipLunch, addonTotal]);
 
   const handleConfirm = () => {
     if (!data?.available || dynamicDays.length === 0) return;
@@ -383,11 +466,26 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
           const opt = options.find(o => o.menu_item_id === selectedId);
           if (!selectedId || !opt) continue;
           flatSelections.push({ plan_date: day.date, meal_time: meal, menu_item_id: selectedId });
-          reviewItems.push({ date: day.date, meal, category, name: opt.name, price_usd: opt.price_usd });
+          reviewItems.push({ date: day.date, meal, category, name: opt.name, price_usd: opt.price_usd, is_addon: false });
         }
       }
     }
-    onConfirmPlan(flatSelections, total, reviewItems, addonId, skipLunch);
+
+    const addonsFlat = [];
+    for (const id of addonSelectedIds) {
+      const item = menuItems.find(i => i.id === id);
+      const sched = addonSchedules[id];
+      if (!item || !sched) continue;
+      for (const date of sched.dates) {
+        addonsFlat.push({ plan_date: date, meal_time: sched.meal_time, menu_item_id: id });
+        reviewItems.push({
+          date, meal: sched.meal_time, category: tr.menuPlanAddonReviewLabel || 'Extra',
+          name: item.name, price_usd: item.price_usd, is_addon: true,
+        });
+      }
+    }
+
+    onConfirmPlan(flatSelections, total, reviewItems, addonsFlat, skipLunch);
   };
 
   const mealLabels = getMealLabel(tr);
@@ -502,7 +600,44 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
                   ))}
                 </div>
 
-                <AddonSection menuItems={menuItems} tr={tr} addonId={addonId} onSelect={setAddonId} />
+                <AddonSection menuItems={menuItems} tr={tr} selectedIds={addonSelectedIds} onToggle={handleAddonToggle} />
+
+                {addonItems.length > 0 && (
+                  <div
+                    className="card"
+                    style={{
+                      width: '100%', marginTop: 12, padding: '14px 16px',
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      border: '1px solid var(--border-card)',
+                    }}
+                  >
+                    <div style={{
+                      width: 34, height: 34, borderRadius: 9, background: 'var(--bg-muted)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <CalendarClock size={17} color="var(--brand-green)" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-dark)' }}>
+                        {tr.menuPlanAddonScheduleBtn} — {addonItems.length}
+                      </div>
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                        +${addonTotal.toFixed(2)}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setAddonModalOpen(true)}
+                      className="btn-primary"
+                      style={{ padding: '9px 18px', borderRadius: 10, fontSize: '0.82rem', fontWeight: 700, flexShrink: 0 }}
+                    >
+                      {tr.menuPlanAddonConfigureBtn}
+                    </button>
+                  </div>
+                )}
+
+                {addonItems.length > 0 && (
+                  <ScheduleSummary items={addonItems} schedules={addonSchedules} mealLabels={mealLabels} tr={tr} language={language} />
+                )}
               </>
             );
           })()}
@@ -520,7 +655,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
           <div style={{ display: 'flex', flexDirection: 'row', maxWidth: 900, width: '100%', margin: '0 auto', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>
-                {dynamicDays.length} {tr.menuPlanDaysLabel || 'days'}{addonItem ? ' + 1' : ''}
+                {dynamicDays.length} {tr.menuPlanDaysLabel || 'days'}{addonItems.length > 0 ? ` + ${addonItems.length}` : ''}
               </div>
               <div style={{ fontSize: '1.3rem', fontWeight: 900, color: 'var(--brand-green)' }}>${total.toFixed(2)}</div>
             </div>
@@ -530,6 +665,19 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
           </div>
         </div>
       )}
+
+      <AddonScheduleModal
+        isOpen={addonModalOpen}
+        onClose={() => setAddonModalOpen(false)}
+        items={addonItems}
+        schedules={addonSchedules}
+        onChangeSchedule={handleAddonScheduleChange}
+        validDates={validDates}
+        skipLunch={skipLunch}
+        mealLabels={mealLabels}
+        tr={tr}
+        language={language}
+      />
     </div>
   );
 }

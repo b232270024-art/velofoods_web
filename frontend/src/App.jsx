@@ -76,8 +76,8 @@ export default function App() {
   // ─── 12-day plan state: selections made in PlanPreview, carried through the
   // guest-details modal + addon step to the final review/pay screen ─────────────
   const [planSelections, setPlanSelections] = useState([]); // [{ plan_date, meal_time, menu_item_id }]
-  const [planReviewItems, setPlanReviewItems] = useState([]); // [{ date, meal, name, price_usd }] — display only
-  const [planAddonId, setPlanAddonId] = useState(null);
+  const [planReviewItems, setPlanReviewItems] = useState([]); // [{ date, meal, name, price_usd, is_addon }] — display only
+  const [planAddons, setPlanAddons] = useState([]); // [{ plan_date, meal_time, menu_item_id }]
   const [planSkipLunch, setPlanSkipLunch] = useState(false);
   const [guestDetailsOpen, setGuestDetailsOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
@@ -264,10 +264,10 @@ export default function App() {
   // ─── 12-day plan: Confirm (with the guest's chosen day/meal selections + optional
   // recommended addon, both picked on the same plan_preview page) → ask guest
   // details (room always, no delivery choice) ────────────────────────────────────
-  const handleConfirmPlan = (selections, total, reviewItems, addonId, skipLunch) => {
+  const handleConfirmPlan = (selections, total, reviewItems, addons, skipLunch) => {
     setPlanSelections(selections);
     setPlanReviewItems(reviewItems);
-    setPlanAddonId(addonId);
+    setPlanAddons(addons || []);
     setPlanSkipLunch(Boolean(skipLunch));
     setDeliveryType(null);
     setGuestDetailsOpen(true);
@@ -303,7 +303,7 @@ export default function App() {
     setPendingAllergyOther('');
     setPlanSelections([]);
     setPlanReviewItems([]);
-    setPlanAddonId(null);
+    setPlanAddons([]);
     setPlanSkipLunch(false);
     setSelectedTimeSlotId(null);
     goToStep('hero');
@@ -390,7 +390,7 @@ export default function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ selections: planSelections, addon_menu_item_id: planAddonId, skip_lunch: planSkipLunch }),
+        body: JSON.stringify({ selections: planSelections, addons: planAddons, skip_lunch: planSkipLunch }),
       });
       const orderData = await orderRes.json();
       if (!orderRes.ok) throw new Error(orderData.error || 'Order failed');
@@ -459,8 +459,6 @@ export default function App() {
       setSubmitting(false);
     }
   };
-
-  const planAddonItem = planAddonId ? menuItems.find(i => i.id === planAddonId) : null;
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + Number(i.price_usd) * i.quantity, 0);
@@ -541,7 +539,6 @@ export default function App() {
           <div className="container">
             <PlanReviewStep
               reviewItems={planReviewItems}
-              addonItem={planAddonItem}
               session={session}
               language={language}
               tr={tr}

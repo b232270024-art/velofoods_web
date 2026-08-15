@@ -152,7 +152,20 @@ export const createPlanOrderSchema = z.object({
     )
     .min(1, 'Дор хаяж нэг сонголт байх ёстой')
     .max(200, 'Сонголтын тоо хэтэрхий их байна'),
-  addon_menu_item_id: uuidSchema('addon_menu_item_id зөв UUID байх ёстой').nullish(),
+  // Нэмэлт (is_addon_recommended) хоол тус бүрийг зочин хэдэн ч өдөр, өөр
+  // өөр meal_time-аар авахаар "хуваарилж" болно — нэг мөр нэг хүргэлт (нэг
+  // өдөр/нэг цаг дээрх нэг ширхэг) илэрхийлнэ. Ижил menu_item_id олон удаа
+  // (өөр өдрөөр) давтагдаж болно.
+  addons: z
+    .array(
+      z.object({
+        plan_date: dateStringSchema,
+        meal_time: z.enum(['morning', 'lunch', 'evening'], { message: 'meal_time нь morning/lunch/evening байх ёстой' }),
+        menu_item_id: uuidSchema('menu_item_id зөв UUID байх ёстой'),
+      })
+    )
+    .max(120, 'Нэмэлт хүргэлтийн тоо хэтэрхий их байна')
+    .nullish(),
   // Зочин "12 хоногийн турш өдрийн хоол авахгүй" гэж сонговол true — тэгвэл
   // selections дотор meal_time='lunch' огт байхгүй байх ёстой бөгөөд серверт
   // ч (POST /api/orders/plan) өдрийн хоолны слотыг заавал сонгох шаардлагаас

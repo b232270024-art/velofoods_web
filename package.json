@@ -9,8 +9,11 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
+    "dev": "concurrently -n backend,frontend -c green,cyan \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "node --watch src/index.js",
+    "dev:frontend": "npm run dev --prefix frontend",
     "migrate": "node src/db/migrate.js",
+    "seed": "node scripts/seed-local.mjs",
     "build": "npm install --prefix frontend && npm run build --prefix frontend",
     "translate:i18n": "node scripts/translate-i18n.mjs"
   },
@@ -32,5 +35,8 @@
     "uuid": "^11.1.1",
     "winston": "^3.19.0",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
   }
 }

@@ -20,7 +20,7 @@ function formatPlanDate(dateStr, language) {
 // 12 хоногийн планы сүүлийн шат — өдөр тус бүрийн товч дэлгэрэнгүй, сонгосон
 // нэмэлт зүйл (байвал), нийт үнэ, нөхцөл зөвшөөрөл, төлбөр товч.
 export function PlanReviewStep({
-  reviewItems, addonItem, session, language, tr,
+  reviewItems, session, language, tr,
   agreeTerms, onToggleAgree, onOpenTerms,
   onPay, isSubmitting, onBack,
 }) {
@@ -44,9 +44,7 @@ export function PlanReviewStep({
       ]);
   }, [reviewItems]);
 
-  const coreTotal = reviewItems.reduce((s, i) => s + Number(i.price_usd), 0);
-  const addonPrice = addonItem ? Number(addonItem.price_usd) : 0;
-  const grandTotal = coreTotal + addonPrice;
+  const grandTotal = reviewItems.reduce((s, i) => s + Number(i.price_usd), 0);
 
   return (
     <div className="anim-fade-up" style={{ maxWidth: 680, margin: '0 auto', padding: '40px 0 100px' }}>
@@ -83,29 +81,31 @@ export function PlanReviewStep({
             {meals.map(([meal, items]) => (
               <div key={meal} style={{ marginBottom: 4 }}>
                 <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-muted)', marginTop: 4 }}>{mealLabels[meal]}</div>
-                {items.map(item => (
-                  <div key={`${item.date}-${item.meal}-${item.category}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', padding: '2px 0 2px 4px', color: 'var(--text-body)' }}>
-                    <span>{item.name}</span>
-                    <span style={{ fontWeight: 700, color: 'var(--text-dark)', flexShrink: 0 }}>${Number(item.price_usd).toFixed(2)}</span>
+                {items.map((item, idx) => (
+                  <div
+                    key={`${item.date}-${item.meal}-${idx}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                      fontSize: '0.83rem', padding: '2px 0 2px 4px', color: 'var(--text-body)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      {item.is_addon && (
+                        <Utensils size={11} color="#9a3412" style={{ flexShrink: 0 }} />
+                      )}
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}{item.is_addon ? ` (${tr.menuPlanAddonReviewLabel || 'Extra'})` : ''}
+                      </span>
+                    </span>
+                    <span style={{ fontWeight: 700, color: item.is_addon ? '#9a3412' : 'var(--text-dark)', flexShrink: 0 }}>
+                      ${Number(item.price_usd).toFixed(2)}
+                    </span>
                   </div>
                 ))}
               </div>
             ))}
           </div>
         ))}
-
-        {addonItem && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10,
-            background: '#fff7ed', border: '1px solid #fed7aa', marginBottom: 4,
-          }}>
-            <Utensils size={15} color="#9a3412" />
-            <span style={{ flex: 1, fontSize: '0.83rem', fontWeight: 700, color: '#9a3412' }}>
-              + {addonItem.name} ({tr.menuPlanAddonReviewLabel || 'extra, delivered tomorrow'})
-            </span>
-            <span style={{ fontWeight: 800, color: '#9a3412' }}>${addonPrice.toFixed(2)}</span>
-          </div>
-        )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
           <span style={{ fontWeight: 700, color: 'var(--text-dark)' }}>{tr.cartSubtotal || 'Total'}</span>

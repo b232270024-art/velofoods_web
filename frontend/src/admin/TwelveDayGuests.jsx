@@ -53,7 +53,10 @@ function OrderRow({ order, restaurantByDiet }) {
   const allergyTags = order.allergy_tags || [];
   const hasAllergyInfo = allergyTags.length > 0 || Boolean(order.allergy_other);
   const items = order.items || [];
-  const coreItems = items.filter(i => !i.is_addon).sort((a, b) => {
+  // Нэмэлт (addon) хоолыг ч core хоолуудтай адил өдөр/цагаар нь эрэмбэлж,
+  // тухайн өдрийнхөө дор нэгтгэж харуулна (тусад нь жагсаах биш) — зочин
+  // нэмэлт хоолыг ч мөн өдөр/цагаар нь хуваарилдаг болсонтой нийцнэ.
+  const sortedItems = [...items].sort((a, b) => {
     if (a.plan_date !== b.plan_date) return (a.plan_date || '').localeCompare(b.plan_date || '');
     return (a.plan_meal_time || '').localeCompare(b.plan_meal_time || '');
   });
@@ -185,7 +188,7 @@ function OrderRow({ order, restaurantByDiet }) {
             )}
 
             <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-dark)', marginTop: 10, marginBottom: 6 }}>
-              Зочны сонгосон 12 хоногийн цэс ({coreItems.length} хоол):
+              Зочны сонгосон 12 хоногийн цэс ({sortedItems.length} хоол{addonItems.length > 0 ? `, үүнээс ${addonItems.length} нэмэлт` : ''}):
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
               <thead>
@@ -197,13 +200,23 @@ function OrderRow({ order, restaurantByDiet }) {
                 </tr>
               </thead>
               <tbody>
-                {coreItems.map((item, idx) => {
+                {sortedItems.map((item, idx) => {
                   const hit = (item.allergens || []).filter(a => allergyTags.includes(a));
                   return (
-                    <tr key={idx} style={{ borderTop: '1px solid var(--border)', background: hit.length > 0 ? '#fef2f2' : undefined }}>
+                    <tr key={idx} style={{ borderTop: '1px solid var(--border)', background: hit.length > 0 ? '#fef2f2' : item.is_addon ? '#fff7ed' : undefined }}>
                       <td style={{ padding: '5px 10px', fontWeight: 700, color: 'var(--brand-green)' }}>{fmtPlanDate(item.plan_date)}</td>
                       <td style={{ padding: '5px 10px', color: 'var(--text-muted)' }}>{MEAL_LABEL[item.plan_meal_time] || item.plan_meal_time}</td>
-                      <td style={{ padding: '5px 10px', color: 'var(--text-body)' }}>{item.name}</td>
+                      <td style={{ padding: '5px 10px', color: 'var(--text-body)' }}>
+                        {item.name}
+                        {item.is_addon && (
+                          <span style={{
+                            marginLeft: 6, padding: '1px 7px', borderRadius: 999,
+                            background: '#fed7aa', color: '#9a3412', fontSize: '0.68rem', fontWeight: 700,
+                          }}>
+                            + нэмэлт
+                          </span>
+                        )}
+                      </td>
                       <td style={{ padding: '5px 10px', color: hit.length > 0 ? '#991b1b' : 'var(--text-muted)', fontWeight: hit.length > 0 ? 700 : 400 }}>
                         {hit.length > 0 ? hit.join(', ') : '—'}
                       </td>
@@ -212,15 +225,6 @@ function OrderRow({ order, restaurantByDiet }) {
                 })}
               </tbody>
             </table>
-
-            {addonItems.length > 0 && (
-              <div style={{
-                marginTop: 12, padding: '8px 12px', borderRadius: 8,
-                background: '#fff7ed', border: '1px solid #fed7aa', fontSize: '0.78rem', color: '#9a3412', fontWeight: 700,
-              }}>
-                + Нэмэлт санал: {addonItems.map(a => `${a.name} ($${Number(a.unit_price_usd ?? 0).toFixed(2)})`).join(', ')}
-              </div>
-            )}
           </td>
         </tr>
       )}
