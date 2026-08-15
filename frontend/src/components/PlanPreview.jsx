@@ -266,6 +266,9 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
   const [selections, setSelections] = useState({}); // { [date]: { [mealKey]: { [category]: menu_item_id } } }
   const [activeDate, setActiveDate] = useState(null);
   const [addonId, setAddonId] = useState(null);
+  // Зочин 12 хоногийн турш өдрийн хоол (lunch) авахгүй бол true — бүх өдрийн
+  // lunch сонголт нийт үнэ болон эцсийн захиалгаас алгасагдана.
+  const [skipLunch, setSkipLunch] = useState(false);
 
   // New state for user-selected date range
   const [startDate, setStartDate] = useState(''); // YYYY-MM-DD
@@ -356,6 +359,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
     let sum = 0;
     for (const day of dynamicDays) {
       for (const meal of MEAL_KEYS) {
+        if (skipLunch && meal === 'lunch') continue;
         for (const [category, options] of Object.entries(day.meals[meal] || {})) {
           const selectedId = selections[day.date]?.[meal]?.[category];
           const opt = options.find(o => o.menu_item_id === selectedId) || options[0];
@@ -365,7 +369,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
     }
     if (addonItem) sum += Number(addonItem.price_usd);
     return sum;
-  }, [dynamicDays, selections, addonItem]);
+  }, [dynamicDays, selections, addonItem, skipLunch]);
 
   const handleConfirm = () => {
     if (!data?.available || dynamicDays.length === 0) return;
@@ -373,6 +377,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
     const reviewItems = [];
     for (const day of dynamicDays) {
       for (const meal of MEAL_KEYS) {
+        if (skipLunch && meal === 'lunch') continue;
         for (const [category, options] of Object.entries(day.meals[meal] || {})) {
           const selectedId = selections[day.date]?.[meal]?.[category] ?? options[0]?.menu_item_id;
           const opt = options.find(o => o.menu_item_id === selectedId);
@@ -382,7 +387,7 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
         }
       }
     }
-    onConfirmPlan(flatSelections, total, reviewItems, addonId);
+    onConfirmPlan(flatSelections, total, reviewItems, addonId, skipLunch);
   };
 
   const mealLabels = getMealLabel(tr);
@@ -402,6 +407,24 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
         <Info size={17} color="var(--brand-green-light)" style={{ flexShrink: 0, marginTop: 1 }} />
         <p style={{ fontSize: '0.83rem', color: 'var(--text-body)', lineHeight: 1.55 }}>{tr.menuPlanInfoNote}</p>
       </div>
+
+      {data?.available && (
+        <label className="card" style={{
+          display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
+          marginBottom: 24, cursor: 'pointer',
+        }}>
+          <input
+            type="checkbox"
+            className="checkbox-custom"
+            checked={skipLunch}
+            onChange={e => setSkipLunch(e.target.checked)}
+            style={{ marginTop: 2, flexShrink: 0 }}
+          />
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-body)', lineHeight: 1.5 }}>
+            <strong style={{ color: 'var(--text-dark)' }}>{tr.menuPlanSkipLunchLabel}</strong>
+          </span>
+        </label>
+      )}
 
       {data?.available && (
         <InlineDateRangePicker 
@@ -451,15 +474,25 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
                     {formatFullDate(currentDay.date, language)}
                   </div>
                   {MEAL_KEYS.map(meal => (
-                    <MealTimeSection
-                      key={meal}
-                      date={currentDay.date}
-                      mealKey={meal}
-                      label={mealLabels[meal]}
-                      categories={currentDay.meals[meal] || {}}
-                      selections={selections[currentDay.date]?.[meal]}
-                      onSelect={handleSelect}
-                    />
+                    meal === 'lunch' && skipLunch ? (
+                      <div key={meal} style={{
+                        marginTop: 26, padding: '12px 14px', borderRadius: 12,
+                        background: 'var(--bg-card)', border: '1px dashed var(--border)',
+                        fontSize: '0.83rem', color: 'var(--text-muted)', fontWeight: 600,
+                      }}>
+                        {mealLabels.lunch} — {tr.menuPlanSkipLunchBadge}
+                      </div>
+                    ) : (
+                      <MealTimeSection
+                        key={meal}
+                        date={currentDay.date}
+                        mealKey={meal}
+                        label={mealLabels[meal]}
+                        categories={currentDay.meals[meal] || {}}
+                        selections={selections[currentDay.date]?.[meal]}
+                        onSelect={handleSelect}
+                      />
+                    )
                   ))}
                 </div>
 

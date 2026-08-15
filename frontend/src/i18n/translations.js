@@ -132,6 +132,8 @@ export const t = {
     menuPlanReviewTitle: 'Review your plan',
     menuPlanInfoNote: 'Orders must be placed at least one day in advance, so your available days and price depend on when you order. Tap "Swap" on any meal to choose a different dish.',
     menuPlanReviewChangeNote: 'Once paid, please contact us directly if you need to change any of your daily meal picks.',
+    menuPlanSkipLunchLabel: "I don't want lunch — skip it for all 12 days (only breakfast and dinner will be ordered)",
+    menuPlanSkipLunchBadge: 'Skipped',
     loading: 'Loading...',
     genericError: 'Something went wrong. Please try again.',
 
@@ -462,6 +464,8 @@ export const t = {
     deliveryTimeMidday: "منتصف اليوم",
     deliveryTimeEvening: "الفترة المسائية",
     deliveryTimeRequiredHint: "اختر موعد توصيل أعلاه للمتابعة.",
+    menuPlanSkipLunchLabel: "لا أريد الغداء — تخطيه لمدة 12 يومًا (سيتم طلب الإفطار والعشاء فقط)",
+    menuPlanSkipLunchBadge: "تم التخطي",
   },
 
   hi: {
@@ -670,6 +674,8 @@ export const t = {
     deliveryTimeMidday: "दोपहर",
     deliveryTimeEvening: "शाम",
     deliveryTimeRequiredHint: "जारी रखने के लिए ऊपर दिया गया डिलीवरी का समय चुनें।",
+    menuPlanSkipLunchLabel: "मुझे लंच नहीं चाहिए — इसे सभी 12 दिनों के लिए छोड़ दें (केवल नाश्ता और रात का खाना ऑर्डर किया जाएगा)",
+    menuPlanSkipLunchBadge: "छोड़ा हुआ",
   },
 };
 

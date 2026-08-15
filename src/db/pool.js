@@ -7,11 +7,53 @@ dotenv.config();
 let isPgConnected = false;
 let realPool = null;
 
+// TLS сертификатыг бүрэн баталгаажуулж (rejectUnauthorized: true) нэг удаа
+// урьдчилан холбогдож үзнэ. Railway зэрэг зарим managed Postgres нь
+// self-signed сертификат ашигладаг тул үүнийг урьдчилан мэдэхгүйгээр шууд
+// rejectUnauthorized: true болгочихвол production DB-рүү огт холбогдохгүй
+// (сайт бүхэлдээ унах) эрсдэлтэй. Тиймээс: боломжтой бол (олон нийтийн CA-аар
+// баталгаажсан сертификат) бүрэн баталгаажуулалттайгаар ажиллуулж, зөвхөн
+// итгэлийн гинжийг батлах боломжгүй (self-signed) тохиолдолд л тодорхой
+// анхааруулга логтойгоор хуучин (rejectUnauthorized: false) горимд буцна —
+// аль ч тохиолдолд процесс/сервер унахгүй.
+async function probeVerifiedSsl(connectionString) {
+  const probeClient = new pg.Client({
+    connectionString,
+    ssl: { rejectUnauthorized: true },
+    connectionTimeoutMillis: 5000,
+  });
+  try {
+    await probeClient.connect();
+    await probeClient.end();
+    return true;
+  } catch (err) {
+    const msg = (err && err.message) || '';
+    const isCertTrustError = ['SELF_SIGNED_CERT_IN_CHAIN', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'].includes(err.code) ||
+      /self.signed|unable to verify|unable to get local issuer|certificate/i.test(msg);
+    if (isCertTrustError) {
+      console.log('⚠️ DB TLS сертификатыг олон нийтийн CA-аар баталгаажуулж чадсангүй (магадгүй self-signed) — MITM-ээс хамгаалахын тулд Railway/DB-ийн CA сертификатыг PGSSLROOTCERT-т зааж өгөхийг зөвлөж байна. Одоохондоо rejectUnauthorized:false горимд ажиллана:', msg);
+    } else {
+      console.log('DB TLS баталгаажуулалтын урьдчилсан шалгалт амжилтгүй (өөр шалтгаанаар, жишээ нь сүлжээ/нэвтрэлт) — rejectUnauthorized:false горимд ажиллана:', msg);
+    }
+    return false;
+  }
+}
+
 // Railway болон бусад cloud platform дээр DATABASE_URL нь SSL шаардах тул
 // sslmode=require эсвэл tls option-г автоматаар олж тогтооно.
 if (process.env.DATABASE_URL) {
   const isLocalhost = process.env.DATABASE_URL.includes('localhost') ||
                       process.env.DATABASE_URL.includes('127.0.0.1');
+  // Заавал PGSSLROOTCERT (эсвэл DATABASE_URL-ийн sslrootcert параметр)-аар
+  // CA файл зааж өгсөн бол node-postgres үүнийг өөрөө уншиж баталгаажуулна —
+  // тэр тохиолдолд урьдчилсан шалгалт хийх шаардлагагүй.
+  const hasExplicitCaCert = Boolean(process.env.PGSSLROOTCERT);
+  const useVerifiedSsl = isLocalhost || hasExplicitCaCert
+    ? true
+    : await probeVerifiedSsl(process.env.DATABASE_URL);
+  if (!isLocalhost && useVerifiedSsl && !hasExplicitCaCert) {
+    console.log('✅ DB TLS сертификат олон нийтийн CA-аар баталгаажлаа — rejectUnauthorized:true ашиглаж байна.');
+  }
   realPool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
     connectionTimeoutMillis: 5000,
@@ -28,7 +70,7 @@ if (process.env.DATABASE_URL) {
     // TCP keep-alive асаана.
     idleTimeoutMillis: 30000,
     keepAlive: true,
-    ssl: isLocalhost ? false : { rejectUnauthorized: false },
+    ssl: isLocalhost ? false : { rejectUnauthorized: useVerifiedSsl },
   });
 
   // node-postgres нь idle client сүлжээний алдаатай таарвал pool дээр 'error'

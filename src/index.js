@@ -30,6 +30,23 @@ import { generalLimiter, writeLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
+// asyncHandler-аар ороогоогүй route (жишээ нь өмнө нь orders.js:326-д байсан
+// баг) эсвэл гэнэтийн синхрон алдаа гарвал listener-гүй Node процессыг шууд
+// (log ч үлдээлгүй) унагадаг байсан — энэ нь ганц route-ийн алдаанаас болж
+// бүх идэвхтэй хэрэглэгч, admin dashboard, chat socket бүгд адилхан унадаг
+// нэг цэгийн эмзэг байдал байв. Энд барьж лог хийснээр яг юу алдаа гаргаснаа
+// мэдэх боломжтой болгож, дараа нь Railway процессыг цэвэрхэн (state
+// бохирдоогүй) дахин асаадаг байхын тулд зориудаар process.exit(1) хийнэ.
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception — процесс унана', { error: err.message, stack: err.stack });
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  logger.error('Unhandled promise rejection — процесс унана', { error: err.message, stack: err.stack });
+  process.exit(1);
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

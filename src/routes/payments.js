@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
+import { requireSession } from '../middleware/auth.js';
 import { validateBody, paymentInitiateSchema } from '../middleware/validation.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import {
@@ -14,13 +15,18 @@ export const paymentsRouter = Router();
 // Захиалгын үнийг доллараар авч, сонгосон gateway руу илгээх мөчид
 // дуудагдана. Одоогоор зөвхөн hipay бодитоор холбогдсон
 // (paymentInitiateSchema бусад gateway_provider утгыг зөвшөөрдөггүй).
-paymentsRouter.post('/initiate', validateBody(paymentInitiateSchema), asyncHandler(async (req, res) => {
+paymentsRouter.post('/initiate', requireSession, validateBody(paymentInitiateSchema), asyncHandler(async (req, res) => {
   const debugApi = process.env.DEBUG_API_ERRORS === '1';
   try {
     const { order_id, gateway_provider } = req.body;
 
     const order = await pool.query('SELECT * FROM orders WHERE id = $1', [order_id]);
-    if (order.rows.length === 0) return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+    // orders.js-ийн GET /:id-тэй адил session_id тааруулж эзэмшлийг шалгана —
+    // эс бөгөөс хүчинтэй ямар ч session бусдын order_id-г мэдэхэд л тэр
+    // захиалга дээр шинэ Hipay checkout нээж чадах IDOR цоорхой байв.
+    if (order.rows.length === 0 || order.rows[0].session_id !== req.session.session_id) {
+      return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+    }
 
   if (gateway_provider === 'hipay') {
     const logger = req.app.get('logger');

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { requireSession } from '../middleware/auth.js';
-import { validateBody, createOrderSchema, createPlanOrderSchema } from '../middleware/validation.js';
+import { validateBody, createOrderSchema, createPlanOrderSchema, uuidPattern } from '../middleware/validation.js';
 import { resolvePlanWindow, dateToDayNumber, enumerateDates, diffDays } from '../services/twelveDayPlan.js';
 import { generateOrderNumber } from '../services/orderNumber.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -154,7 +154,7 @@ ordersRouter.post('/', requireSession, validateBody(createOrderSchema), asyncHan
 // үүсгэнэ. Үнэ болон сонголтын хүчинтэй эсэхийг бүхэлд нь СЕРВЕРТ дахин
 // тооцоолж баталгаажуулна — клиентээс ирсэн юуг ч (огноо, үнэ) итгэмжлэхгүй.
 ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), asyncHandler(async (req, res) => {
-  const { selections, addon_menu_item_id } = req.body;
+  const { selections, addon_menu_item_id, skip_lunch } = req.body;
   const { session_id } = req.session;
 
   const sessionRes = await pool.query(
@@ -227,10 +227,15 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
     [queryDayNumbers, session.diet_type_id]
   );
 
-  // "date|meal" -> Map(menu_item_id -> { category, price }); 
+  // "date|meal" -> Map(menu_item_id -> { category, price });
   const optionsByDateMeal = new Map();
   const expectedBucketKeys = new Set();
   for (const row of configured.rows) {
+    // skip_lunch=true бол өдрийн хоолны бакетуудыг огт "шаардлагатай" гэж
+    // тооцохгүй — доорх "seenBuckets.size !== expectedBucketKeys.size"
+    // шалгалт зочны 12 хоногийн турш lunch сонголт огт ирээгүй байхыг
+    // алдаа гэж үзэхгүй болно.
+    if (skip_lunch && row.meal_time === 'lunch') continue;
     const datesForDay = dayNumberToDate[row.day_number] || [];
     for (const date of datesForDay) {
       const dmKey = `${date}|${row.meal_time}`;
@@ -323,7 +328,11 @@ ordersRouter.post('/plan', requireSession, validateBody(createPlanOrderSchema), 
   }
 }));
 
-ordersRouter.get('/:id', requireSession, async (req, res) => {
+ordersRouter.get('/:id', requireSession, asyncHandler(async (req, res) => {
+  if (!uuidPattern.test(req.params.id)) {
+    return res.status(404).json({ error: 'Захиалга олдсонгүй.' });
+  }
+
   const order = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
   // session_id тааруулж эзэмшлийг шалгана — эс бөгөөс хүчинтэй ямар ч session
   // (өөрөөр хэлбэл ямар ч зочин) бусдын захиалгын дэлгэрэнгүйг (хаяг, нэр,
@@ -340,5 +349,5 @@ ordersRouter.get('/:id', requireSession, async (req, res) => {
      ORDER BY oi.plan_date NULLS LAST, oi.plan_meal_time`,
     [req.params.id]
   );
-    res.json({ ...order.rows[0], items: items.rows });
-  });
+  res.json({ ...order.rows[0], items: items.rows });
+}));

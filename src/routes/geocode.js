@@ -6,14 +6,20 @@ export const geocodeRouter = Router();
 
 function httpGetJson(url, headers = {}) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers }, (r) => {
+    // timeout байхгүй бол Google/Nominatim саатах үед хүсэлт мөнхөд хариу
+    // хүлээгээд зогсдог байсан (hipay.js/exchangeRate.js-д байдаг адил хамгаалалт
+    // энд байхгүй байсан цоорхой) — 8с-д хариу ирэхгүй бол тодорхой алдаа шидэж,
+    // reverseGeocodeGoogle/Nominatim-ийн catch нь fallback/404 руу шилждэг.
+    const req = https.get(url, { headers, timeout: 8000 }, (r) => {
       let body = '';
       r.on('data', (chunk) => { body += chunk; });
       r.on('end', () => {
         try { resolve(JSON.parse(body)); }
         catch (err) { reject(err); }
       });
-    }).on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('Geocoding хүсэлт хугацаа хэтэрлээ')));
+    req.on('error', reject);
   });
 }
 

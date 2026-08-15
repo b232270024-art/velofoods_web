@@ -153,6 +153,11 @@ export const createPlanOrderSchema = z.object({
     .min(1, 'Дор хаяж нэг сонголт байх ёстой')
     .max(200, 'Сонголтын тоо хэтэрхий их байна'),
   addon_menu_item_id: uuidSchema('addon_menu_item_id зөв UUID байх ёстой').nullish(),
+  // Зочин "12 хоногийн турш өдрийн хоол авахгүй" гэж сонговол true — тэгвэл
+  // selections дотор meal_time='lunch' огт байхгүй байх ёстой бөгөөд серверт
+  // ч (POST /api/orders/plan) өдрийн хоолны слотыг заавал сонгох шаардлагаас
+  // чөлөөлнө.
+  skip_lunch: z.boolean().nullish(),
 });
 
 const timeStringSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Цаг HH:MM хэлбэртэй байх ёстой');
