@@ -3,6 +3,7 @@ node_modules
 logs/*.log
 frontend/dist
 *.local
+docs/
 .DS_Store
 public/uploads/*
 !public/uploads/.gitkeep

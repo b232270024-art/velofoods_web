@@ -29,9 +29,13 @@ const DIET_CONFIG = {
 };
 
 
+export function humanizeLabel(s) {
+  return (s || '').replace(/[_-]+/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export function dietStyle(name) {
   const key = (name || '').toLowerCase().trim().replace(/\s+/g, '_');
-  return DIET_CONFIG[key] || { ...DIET_CONFIG.standard, label: name || DIET_CONFIG.standard.label };
+  return DIET_CONFIG[key] || { ...DIET_CONFIG.standard, label: humanizeLabel(name) || DIET_CONFIG.standard.label };
 }
 
 
@@ -106,7 +110,7 @@ function ItemCard({ item, idx, qty, onAddToCart, onRemoveFromCart, readOnly, com
                 background: 'var(--bg-muted)', color: 'var(--text-muted)',
                 fontSize: '0.72rem', fontWeight: 600,
               }}>
-                {item.category}
+                {humanizeLabel(item.category)}
               </span>
             )}
           </div>
@@ -270,17 +274,48 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
     <div className="anim-fade-up" style={{ padding: `40px 0 ${cartCount > 0 ? 110 : 40}px` }}>
       <BackButton label={tr.back} onBack={onBack} />
 
-      {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-end', gap: 20, marginBottom: 28 }}>
-        <div>
-          <h2 className="heading-lg">
+      {/* Hero banner */}
+      <div
+        className="anim-fade-up"
+        style={{
+          position: 'relative', overflow: 'hidden',
+          borderRadius: 'var(--r-xl)',
+          minHeight: isMobile ? 200 : 280,
+          marginBottom: 24,
+          background: '#0B120E',
+          boxShadow: 'var(--shadow-md)',
+        }}
+      >
+        <img
+          src="/images/hero-menu.webp"
+          alt=""
+          style={{
+            position: 'absolute', inset: 0, width: '100%', height: '100%',
+            objectFit: 'cover', objectPosition: 'right center',
+          }}
+        />
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(90deg, rgba(11,18,14,0.94) 0%, rgba(11,18,14,0.55) 42%, rgba(11,18,14,0) 75%)',
+        }} />
+        <div style={{
+          position: 'relative', zIndex: 1, height: '100%',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          padding: isMobile ? '24px 22px' : '36px 44px',
+        }}>
+          <h2 className="heading-lg" style={{ color: '#fff' }}>
             {tr.menuTitle}
             <span style={{ color: 'var(--brand-green-light)' }}>{tr.menuTitleAccent}</span>
           </h2>
-          <p style={{ color: 'var(--text-muted)', marginTop: 6 }}>{tr.menuDesc}</p>
+          <p style={{ color: 'rgba(255,255,255,0.75)', marginTop: 8, maxWidth: 430, fontSize: isMobile ? '0.85rem' : '1rem' }}>
+            {tr.menuDesc}
+          </p>
         </div>
+      </div>
 
-        <div style={{ position: 'relative', width: '100%', maxWidth: 280 }}>
+      {/* Search */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <div style={{ position: 'relative', width: '100%', maxWidth: 320 }}>
           <Search size={17} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
           <input
             id="menu-search"
@@ -331,7 +366,7 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
                 transition: 'all 0.2s',
               }}
             >
-              {f.name}
+              {cfg.label}
             </button>
           );
         })}
@@ -345,7 +380,7 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
             className={`pill ${catFilter === cat ? 'active' : ''}`}
             onClick={() => setCatFilter(cat)}
           >
-            {cat === 'All' ? tr.menuAllCat : cat}
+            {cat === 'All' ? tr.menuAllCat : humanizeLabel(cat)}
           </button>
         ))}
       </div>
@@ -399,7 +434,7 @@ export function MenuSection({ menuItems, cart, tr, onAddToCart, onRemoveFromCart
                   fontWeight: 800, fontSize: isMobile ? '1.05rem' : '1.3rem', marginBottom: isMobile ? 12 : 18,
                   color: banded ? 'white' : 'var(--text-dark)',
                 }}>
-                  {cat}
+                  {humanizeLabel(cat)}
                 </h3>
                 <CardGrid items={items} getQty={getQty} onAddToCart={onAddToCart} onRemoveFromCart={onRemoveFromCart} compact={isMobile} />
               </section>
