@@ -409,24 +409,6 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
       </div>
 
       {data?.available && (
-        <label className="card" style={{
-          display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px',
-          marginBottom: 24, cursor: 'pointer',
-        }}>
-          <input
-            type="checkbox"
-            className="checkbox-custom"
-            checked={skipLunch}
-            onChange={e => setSkipLunch(e.target.checked)}
-            style={{ marginTop: 2, flexShrink: 0 }}
-          />
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-body)', lineHeight: 1.5 }}>
-            <strong style={{ color: 'var(--text-dark)' }}>{tr.menuPlanSkipLunchLabel}</strong>
-          </span>
-        </label>
-      )}
-
-      {data?.available && (
         <InlineDateRangePicker 
           startDate={startDate} 
           endDate={endDate} 
@@ -470,6 +452,30 @@ export function PlanPreview({ dietTypeId, menuItems, tr, language, onConfirmPlan
                 <DayTabs dates={dates} activeDate={active} onSelect={setActiveDate} language={language} />
 
                 <div className="card" style={{ padding: '18px 22px', background: 'var(--bg-muted)' }}>
+                  <label style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+                    paddingBottom: 14, marginBottom: 16, borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                  }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-body)', lineHeight: 1.45 }}>
+                      {tr.menuPlanSkipLunchLabel}
+                    </span>
+                    <span style={{
+                      position: 'relative', flexShrink: 0, width: 40, height: 24, borderRadius: 999,
+                      background: skipLunch ? 'var(--brand-green)' : 'var(--border)', transition: 'background 0.2s',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={skipLunch}
+                        onChange={e => setSkipLunch(e.target.checked)}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', margin: 0 }}
+                      />
+                      <span style={{
+                        position: 'absolute', top: 3, left: skipLunch ? 19 : 3, width: 18, height: 18, borderRadius: '50%',
+                        background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 0.2s',
+                      }} />
+                    </span>
+                  </label>
+
                   <div style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '1.1rem', color: 'var(--text-dark)' }}>
                     {formatFullDate(currentDay.date, language)}
                   </div>
